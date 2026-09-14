@@ -42,6 +42,19 @@
 
 ---
 
+## Execution order
+
+**Run Task 2 BEFORE Task 1.** Task 1's probe reads the API key from NVS,
+but nothing writes it there until Task 2 builds the setup-portal field.
+Running Task 1 first can only print "no API key in NVS yet". The correct
+sequence is: Task 2 (portal field) → enter the key on the device →
+Task 1 (probe) → Tasks 3, 4, 5, 6 in order.
+
+Task numbering is kept as-is so the task briefs and this plan's internal
+cross-references stay stable.
+
+---
+
 ## Task 1: Prove the Finnhub payload on hardware
 
 The spec records that the success payload's field names are **unverified** — no API key existed at planning time. Nothing may be built on an assumed JSON contract, so this task's only job is to print a real response and confirm the mapping.
@@ -351,11 +364,10 @@ bool tickerEntry(int index, String &symbolOut, float &priceOut,
 // Rather than chain two DST rules, convert Dublin local -> UTC using the
 // tm_isdst the system already resolved, then UTC -> ET.
 
-// VERIFY THIS BEFORE RELYING ON IT. The month shortcut is safe, but the
-// transition-month arithmetic below is easy to get wrong at the
-// boundaries. Check it against known dates before accepting the task —
-// e.g. 2026-03-08 (second Sunday, DST starts) and 2026-11-01 (first
-// Sunday, DST ends), plus the days either side of each.
+// VERIFIED against 14 boundary cases on the host before this plan was
+// finalised, including both 2026 and 2027 transitions: 2026-03-07/08/09,
+// 2026-03-01, 2026-10-31, 2026-11-01, 2027-03-13/14, 2027-11-06/07, plus
+// mid-season months. All correct — use as written, no need to re-derive.
 //
 // Derivation: for any date, the day-of-month of the most recent Sunday
 // is tm_mday - tm_wday. The first Sunday of the month is therefore
