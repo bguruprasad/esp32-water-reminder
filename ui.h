@@ -12,4 +12,9 @@
 // (e.g. once per second), not every loop() tick.
 void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);
 
+// Renders the full-screen reminder alert. Caller is responsible for
+// polling touch.Pressed() afterward and returning to the idle screen
+// (via uiDrawIdleScreen) once the user taps.
+void uiDrawAlertScreen(TFT_eSPI &tft);
+
 #endif

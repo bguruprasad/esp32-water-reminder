@@ -22,3 +22,11 @@ void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &st
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.drawString(statusLine, TFT_HRES / 2, TFT_VRES / 2 + 45, 2);
 }
+
+void uiDrawAlertScreen(TFT_eSPI &tft) {
+  tft.fillScreen(TFT_BLUE);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLUE);
+  tft.drawString("Drink Water!", TFT_HRES / 2, TFT_VRES / 2 - 20, 4);
+  tft.drawString("Tap anywhere to dismiss", TFT_HRES / 2, TFT_VRES / 2 + 20, 2);
+}

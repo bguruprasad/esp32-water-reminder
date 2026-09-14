@@ -44,3 +44,17 @@ bool scheduleIsMarkDue(const struct tm &nowLocal, const struct tm &lastFiredMark
   struct tm nextMark = scheduleNextMark(nowLocal, lastFiredMark);
   return toEpoch(nowLocal) >= toEpoch(nextMark);
 }
+
+struct tm scheduleFloorToMark(const struct tm &t) {
+  struct tm result = t;
+#ifdef DEBUG_FAST_SCHEDULE
+  result.tm_sec = (result.tm_sec / 30) * 30;
+#else
+  result.tm_sec = 0;
+  result.tm_min = (result.tm_min / 30) * 30;
+#endif
+  time_t epoch = mktime(&result);
+  struct tm normalized;
+  localtime_r(&epoch, &normalized);
+  return normalized;
+}

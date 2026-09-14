@@ -17,4 +17,11 @@ struct tm scheduleNextMark(const struct tm &nowLocal, const struct tm &lastFired
 // and nowLocal is still within the active window.
 bool scheduleIsMarkDue(const struct tm &nowLocal, const struct tm &lastFiredMark);
 
+// Floors t down to the most recent scheduled mark boundary: the top of
+// the hour or half-hour in normal mode (e.g. 09:07:33 -> 09:00:00,
+// 09:41:02 -> 09:30:00), or the nearest 30-second boundary in debug mode.
+// Used to grid-align lastFiredMark so the schedule always lands on
+// 09:00/09:30/... rather than drifting from whatever time it was seeded.
+struct tm scheduleFloorToMark(const struct tm &t);
+
 #endif
