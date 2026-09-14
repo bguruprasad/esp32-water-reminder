@@ -42,6 +42,51 @@ don't have to remember on their own.
   DAC/I2S path or a simple `ledc` PWM tone, decided then. Full-screen
   tap-to-dismiss is the sole alert channel for this build.
 
+## Addendum: share price ticker (2026-09-14)
+
+A scrolling share-price band occupies the previously-empty bottom strip of
+the idle screen. It is strictly decorative: it never blocks boot, never
+delays a reminder, and never blocks the alert path.
+
+- **Source**: Finnhub (`/api/v1/quote`), free tier, ~60 calls/min. One
+  symbol per request.
+- **Symbols**: AAPL, MSFT, GOOGL, AMZN, NVDA.
+- **Refresh**: one symbol fetched every 12s, so all five refresh on a
+  60-second cycle — 5 calls/min against the ~60/min limit. Fetches are
+  non-blocking; no single request may stall the UI loop.
+- **Parsing**: ArduinoJson 7.4.3 (new dependency, ~30KB; 270KB free).
+  Reads current price and percent change per symbol. NOTE: the success
+  payload's exact field names are unverified — no API key was available
+  at planning time — so the field mapping must be confirmed on hardware
+  before the rendering work is built on top of it.
+- **TLS**: `setInsecure()`, skipping certificate validation. Finnhub sits
+  behind Cloudflare and a baked-in CA root would expire and silently
+  break the ticker. The accepted risk is that a man-in-the-middle could
+  feed false prices to a decorative desk display on a home network.
+- **API key**: a third field on the existing WiFi setup portal, saved to
+  NVS beside the WiFi credentials. No secret ever enters git — the same
+  rule the WiFi credentials follow. A missing or rejected key shows a
+  quiet notice in the band rather than blocking anything.
+
+  The key is typed directly into the device's setup page by the owner. It
+  is deliberately NOT pasted into the agent conversation and NOT written
+  to any file in this repo, including a gitignored one: a key in a
+  transcript cannot be un-shared, and a key in a file is one `git add .`
+  from entering history, where deleting the file will not remove it.
+  Rotate the key at Finnhub if it is ever exposed.
+- **Layout**: purely additive. The band occupies roughly y=200-235; the
+  clock, divider, weekday and status pill keep the positions already
+  tuned on hardware. The band repaints only its own strip, preserving the
+  partial-redraw discipline that removed the screen flicker.
+- **Market hours**: the band is hidden outside US market hours (09:30-16:00
+  ET, Mon-Fri), and fetching stops then too. This requires converting to
+  US Eastern *arithmetically* inside the ticker module: `configTzTime()`
+  sets one global timezone that the clock depends on, and US DST rules
+  (second Sunday March / first Sunday November) differ from the EU rules
+  already configured for `Europe/Dublin`.
+- **Failure handling**: each symbol retains its last good price. A failed
+  fetch leaves the previous value on screen rather than blanking it.
+
 ## Architecture
 
 Single Arduino sketch (`water-reminder.ino`), built from four concerns:
