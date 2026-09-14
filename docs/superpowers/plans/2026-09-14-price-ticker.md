@@ -44,106 +44,80 @@
 
 ## Execution order
 
-**Run Task 2 BEFORE Task 1.** Task 1's probe reads the API key from NVS,
-but nothing writes it there until Task 2 builds the setup-portal field.
-Running Task 1 first can only print "no API key in NVS yet". The correct
-sequence is: Task 2 (portal field) → enter the key on the device →
-Task 1 (probe) → Tasks 3, 4, 5, 6 in order.
+Actual order run: **Task 2 → Task 1 → 3 → 4 → 5 → 6.** Task 2 went first
+because Task 1 needed the API key to exist in NVS, and nothing wrote it
+there until Task 2 built the setup-portal field. Task 2 is COMPLETE and
+hardware-verified; the key is in NVS.
 
 Task numbering is kept as-is so the task briefs and this plan's internal
 cross-references stay stable.
 
+## Amendment: no serial logging (2026-09-15)
+
+Serial reads from this Mac proved unreliable across many attempts, and
+the decision is to stop depending on them: **diagnostics render to the
+TFT, not to the serial port.**
+
+Consequences for the tasks below:
+
+- **Task 1 is replaced** (see its section): the Finnhub JSON contract is
+  confirmed by running one `curl` from the host, not by an on-device
+  probe read over serial. The response shape is a property of the API,
+  identical whichever machine fetches it, so no firmware is needed.
+- **Task 3**: the `Serial.printf` diagnostic lines in `ticker.cpp` are
+  dropped. Fetch failures surface on screen via the band's own states
+  (`--` for a symbol with no valid quote, `Ticker: no API key` when no
+  key is stored). Do NOT add serial logging.
+- The existing `Serial.print` calls elsewhere in the project are left
+  alone; this amendment only governs new ticker code.
+
 ---
 
-## Task 1: Prove the Finnhub payload on hardware
+## Task 1: Confirm the Finnhub JSON contract (host-side, no firmware)
 
-The spec records that the success payload's field names are **unverified** — no API key existed at planning time. Nothing may be built on an assumed JSON contract, so this task's only job is to print a real response and confirm the mapping.
+The spec records that the success payload's field names are **unverified** — no API key existed at planning time, and nothing may be built on an assumed JSON contract.
 
-**Files:**
-- Modify: `water-reminder.ino` (temporary diagnostic, removed in Task 5)
+**This task writes no code and touches no files.** It was originally an on-device probe read over the serial port; serial reading proved unreliable on this machine and was abandoned (see the "no serial logging" amendment). The response shape is a property of the Finnhub API, identical whichever machine fetches it, so a single host-side request settles it with no firmware, no flashing, and no serial.
+
+**Files:** none.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a confirmed field mapping, recorded in this plan's Task 3 before Task 3 is implemented.
+- Produces: the confirmed field mapping, written into Task 3's `parseQuote()` before Task 3 is implemented.
 
-- [ ] **Step 1: Add a one-shot diagnostic fetch at the end of `setup()`**
+- [ ] **Step 1: The owner runs one request from the host**
 
-Add near the top of `water-reminder.ino`:
-
-```cpp
-#include <HTTPClient.h>
-#include <NetworkClientSecure.h>
-```
-
-Add at the very end of `setup()`:
-
-```cpp
-  // TEMPORARY (removed in Task 5): dump one raw Finnhub response so the
-  // JSON field mapping can be confirmed rather than assumed.
-  {
-    Preferences prefs;
-    prefs.begin("wifi", true);
-    String key = prefs.getString("apikey", "");
-    prefs.end();
-
-    if (key.length() == 0) {
-      Serial.println("[ticker-probe] no API key in NVS yet");
-    } else {
-      NetworkClientSecure client;
-      client.setInsecure();
-      HTTPClient http;
-      String url = "https://finnhub.io/api/v1/quote?symbol=AAPL&token=" + key;
-      if (http.begin(client, url)) {
-        int code = http.GET();
-        Serial.printf("[ticker-probe] HTTP %d\n", code);
-        if (code > 0) Serial.println("[ticker-probe] body: " + http.getString());
-        http.end();
-      } else {
-        Serial.println("[ticker-probe] http.begin failed");
-      }
-    }
-  }
-```
-
-Note this reads NVS key `"apikey"` in namespace `"wifi"` — Task 2 writes it. Running this before Task 2 prints the "no API key" branch, which is a valid partial result.
-
-- [ ] **Step 2: Compile**
-
-Run: `arduino-cli compile --fqbn esp32:esp32:esp32 .`
-Expected: compiles clean.
-
-- [ ] **Step 3: Flash and read serial**
+The API key must NOT be pasted into the agent conversation, a file, or a command the agent runs. The owner runs this themselves, substituting their key:
 
 ```bash
-arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 --board-options UploadSpeed=115200 .
+curl -s "https://finnhub.io/api/v1/quote?symbol=AAPL&token=YOUR_KEY_HERE"
 ```
 
-Then capture boot output. Note the flicker fix means full repaints are rare, but this probe runs in `setup()`, so a reset is enough:
+and reports back **only the JSON response**, never the command line — the response body carries no secret, the URL does.
 
-```bash
-/bin/stty -f /dev/cu.usbserial-120 115200 raw
-/usr/bin/timeout 30 /bin/cat /dev/cu.usbserial-120 | grep ticker-probe
+- [x] **Step 2: Record the mapping into Task 3** — DONE, contract confirmed
+
+Observed response (AAPL, 2026-09-15):
+
+```json
+{"c":333.08,"d":0.81,"dp":0.2438,"h":335.5,"l":331.34,"o":334.79,"pc":332.27,"t":1789416000}
 ```
 
-Expected once a key is saved: `HTTP 200` and a JSON body.
+Confirmed, and it matches the documented shape exactly:
 
-- [ ] **Step 4: Record the mapping**
+- `c` = current price. Present, a JSON **number**.
+- `dp` = percent change. Present, a JSON **number**, and already expressed
+  as a percentage (`0.2438` means 0.24%), NOT a 0-1 fraction. So Task 4's
+  `"%.2f%%"` formatting is correct as written — do **not** multiply by 100.
+- Both are unquoted numbers, so `doc["c"].is<float>()` in `parseQuote()`
+  succeeds. (Had they been quoted strings, that check would have failed
+  and every quote would have been silently discarded.)
 
-Write the observed field names into Task 3's parsing step, replacing the assumed ones. Finnhub's documented shape is `{"c":<current>,"d":<change>,"dp":<pct change>,"h":..,"l":..,"o":..,"pc":<prev close>,"t":<epoch>}` — confirm each field actually used before relying on it.
+**Task 3's `parseQuote()` needs no changes — implement it as written.**
 
-Do NOT paste the key into any command you record in the report; the URL above builds it from NVS at runtime for exactly this reason.
+- [ ] **Step 3: No commit**
 
-- [ ] **Step 5: Commit** (diagnostic only; removed in Task 5)
-
-```bash
-git add water-reminder.ino
-git commit -m "Add temporary Finnhub payload probe
-
-Confirms the quote endpoint's JSON field names on hardware before any
-parsing is built on them. Removed in Task 5.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
+Nothing to commit — this task produces a recorded finding, not a code change.
 
 ---
 
@@ -337,8 +311,8 @@ static String apiKey = "";
 
 void tickerBegin() {
   apiKey = wifiSetupApiKey();
-  Serial.printf("[ticker] api key %s\n",
-                apiKey.length() ? "present" : "MISSING"); // never log the value
+  // No logging — whether a key is present is visible on screen via the
+  // band's "Ticker: no API key" state.
   lastFetchAtMs = millis() - TICKER_FETCH_INTERVAL_MS; // allow an immediate first fetch
 }
 
@@ -415,6 +389,10 @@ static bool parseQuote(const String &body, float &priceOut, float &pctOut) {
   return true;
 }
 
+// No serial logging here — see the "no serial logging" amendment. A
+// failed fetch simply leaves the symbol's previous value in place
+// (quotes[index].valid stays as it was), which the band renders as the
+// last good price, or as "--" if there has never been one.
 static void fetchSymbol(int index) {
   NetworkClientSecure client;
   client.setInsecure(); // see spec: deliberate, Cloudflare cert rotation
@@ -426,25 +404,15 @@ static void fetchSymbol(int index) {
   url += "&token=";
   url += apiKey;
 
-  if (!http.begin(client, url)) {
-    Serial.printf("[ticker] %s: begin failed\n", SYMBOLS[index]);
-    return;
-  }
+  if (!http.begin(client, url)) return;
 
-  int code = http.GET();
-  if (code == 200) {
+  if (http.GET() == 200) {
     float price, pct;
     if (parseQuote(http.getString(), price, pct)) {
       quotes[index].price = price;
       quotes[index].pct = pct;
       quotes[index].valid = true;
-      Serial.printf("[ticker] %s %.2f (%.2f%%)\n", SYMBOLS[index], price, pct);
-    } else {
-      Serial.printf("[ticker] %s: parse failed\n", SYMBOLS[index]);
     }
-  } else {
-    // Never log the URL — it contains the key.
-    Serial.printf("[ticker] %s: HTTP %d\n", SYMBOLS[index], code);
   }
   http.end();
 }
@@ -620,9 +588,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: everything from Tasks 2-4.
 - Produces: a running ticker.
 
-- [ ] **Step 1: Remove the Task 1 diagnostic**
+- [ ] **Step 1: (nothing to remove)**
 
-Delete the whole `// TEMPORARY (removed in Task 5)` block from `setup()`, and the `#include <HTTPClient.h>` / `#include <NetworkClientSecure.h>` lines if nothing else uses them.
+Task 1 was replaced by a host-side `curl` and adds no code to `water-reminder.ino`, so there is no diagnostic block to delete here. Confirm the file has no `[ticker-probe]` text and no stray `#include <HTTPClient.h>` / `#include <NetworkClientSecure.h>` at the sketch level, then move on:
+
+```bash
+grep -n "ticker-probe\|HTTPClient\|NetworkClientSecure" water-reminder.ino || echo "clean, nothing to remove"
+```
 
 - [ ] **Step 2: Include the module and add scroll state**
 
