@@ -14,4 +14,8 @@ bool wifiSetupConnect(unsigned long connectTimeoutMs = 15000);
 // returned false.
 void wifiSetupStartPortal();
 
+// Returns the Finnhub API key saved via the setup portal, or "" if none
+// has been entered. The key lives only in NVS — never in source control.
+String wifiSetupApiKey();
+
 #endif
