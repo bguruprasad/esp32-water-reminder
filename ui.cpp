@@ -22,8 +22,10 @@ static int to12Hour(int hour24, bool *isAm) {
 // the full paint and the partial update agree on where things live.
 static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 34;          // vertical middle of the big digits
 static const int IDLE_DIVIDER_Y = IDLE_CLOCK_Y + 34;
-static const int IDLE_DAY_Y     = IDLE_DIVIDER_Y + 20;
-static const int IDLE_PILL_Y    = IDLE_DAY_Y + 28;
+// Weekday sits 2px higher than it used to, which opens up both the gap
+// above it (divider -> weekday) and the one below (weekday -> pill).
+static const int IDLE_DAY_Y     = IDLE_DIVIDER_Y + 18;
+static const int IDLE_PILL_Y    = IDLE_DAY_Y + 32;
 static const int IDLE_PILL_H    = 26;
 static const int IDLE_AMPM_GAP  = 6;
 // FreeSansBold9pt7b yAdvance — used for the weekday and the pill label.
