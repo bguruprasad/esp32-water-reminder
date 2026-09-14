@@ -16,9 +16,10 @@ don't have to remember on their own.
   winter, IST/BST-equivalent Irish Summer Time in summer).
 - Reminder must be hard to miss: full-screen visual alert. Audible beep is
   deferred (see Non-goals) since no external speaker/buzzer is attached yet.
-- Reminder is dismissed by tapping the touchscreen anywhere; dismissing
-  returns to the idle screen and resets the timer toward the next 30-minute
-  mark.
+- Reminder is dismissed either by tapping the touchscreen anywhere (early
+  dismiss) or automatically after a 10-second flashing alert if untapped;
+  either way, dismissing returns to the idle screen and resets the timer
+  toward the next 30-minute mark.
 - No reminders fire outside the configured window (evenings, weekends,
   before 09:00, at/after 18:00).
 - Entering the window (e.g. device boots at 9:15) does not immediately fire
@@ -96,13 +97,20 @@ Each loop tick, using the current local time:
 Two screens, using `TFT_eSPI` (configured for FNK0114B) and `TFT_Touch`
 exactly as calibrated in the Freenove example sketches:
 
-- **Idle screen**: current time (large), day of week, and either
-  "Next reminder: HH:MM" (inside window) or "Outside work hours" (outside
-  window).
-- **Alert screen**: full-screen message ("💧 Drink Water!" or similar).
-  No audio (see Non-goals). Stays until the user taps anywhere on the
-  screen, then dismisses back to the idle screen and the schedule engine
-  moves on to the next mark.
+- **Idle screen**: current time in 12-hour format with AM/PM, bold and
+  ~20% larger than the original clock text, a thin divider beneath it, day
+  of week, and a status pill showing either "Next reminder: HH:MM" (inside
+  window) or "Outside work hours" (outside window).
+- **Alert screen**: full-screen message ("Drink Water!" or similar) with
+  a continuously cycling background flash (red → amber → green, matching
+  the idle clock's ~2x text size for the headline), and a small drawn
+  glass-of-water icon above the text (built from basic filled shapes —
+  TFT_eSPI has no emoji font, so this is a native shape-drawn icon, not a
+  Unicode glyph). No instructional subtext — the flash, icon, and headline
+  are the whole message. No audio (see Non-goals). Runs for up to 10
+  seconds; tapping anywhere during that window dismisses immediately,
+  otherwise it auto-dismisses at the 10s mark. Either path returns to the
+  idle screen and the schedule engine moves on to the next mark.
 
 ### Debug mode
 
@@ -123,8 +131,9 @@ normal loop (every tick):
  read local time (from synced clock)
  -> schedule engine decides: idle vs due-for-reminder
  -> idle screen renders time/countdown, watches for periodic re-render
- -> on reminder due: switch to alert screen, beep, wait for touch
- -> on touch: dismiss, mark this slot as fired, return to idle
+ -> on reminder due: switch to flashing alert screen, start 10s timer
+ -> on touch OR 10s elapsed (whichever first): dismiss, mark this slot as
+    fired, return to idle
 ```
 
 ## Error handling
