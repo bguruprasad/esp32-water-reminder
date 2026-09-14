@@ -14,8 +14,8 @@ don't have to remember on their own.
 - Reminder fires every 30 minutes, only Monday–Friday, only 09:00–18:00,
   local Dublin time (`Europe/Dublin`, with automatic DST handling — GMT in
   winter, IST/BST-equivalent Irish Summer Time in summer).
-- Reminder must be hard to miss: full-screen visual alert plus an audible
-  beep.
+- Reminder must be hard to miss: full-screen visual alert. Audible beep is
+  deferred (see Non-goals) since no external speaker/buzzer is attached yet.
 - Reminder is dismissed by tapping the touchscreen anywhere; dismissing
   returns to the idle screen and resets the timer toward the next 30-minute
   mark.
@@ -34,6 +34,12 @@ don't have to remember on their own.
   in-memory tally is fine as a stretch, not required).
 - No mobile app / remote control — this is a self-contained device.
 - No support for multiple simultaneous schedules or per-day customization.
+- No audible beep for now: the board's only proven audio path
+  (Sketch_07_Play_MP3_SD_by_DAC) needs the ESP8266Audio library plus an SD
+  card and an I2S DAC output; no external speaker/buzzer is attached to
+  the device yet. Revisit once speaker hardware is available — either the
+  DAC/I2S path or a simple `ledc` PWM tone, decided then. Full-screen
+  tap-to-dismiss is the sole alert channel for this build.
 
 ## Architecture
 
@@ -93,12 +99,10 @@ exactly as calibrated in the Freenove example sketches:
 - **Idle screen**: current time (large), day of week, and either
   "Next reminder: HH:MM" (inside window) or "Outside work hours" (outside
   window).
-- **Alert screen**: full-screen message ("💧 Drink Water!" or similar) plus
-  an audible beep driven through the DAC (same output path demonstrated in
-  Sketch_07_Play_MP3_SD_by_DAC, simplified to a tone/beep rather than MP3
-  playback). Stays until the user taps anywhere on the screen, then
-  dismisses back to the idle screen and the schedule engine moves on to the
-  next mark.
+- **Alert screen**: full-screen message ("💧 Drink Water!" or similar).
+  No audio (see Non-goals). Stays until the user taps anywhere on the
+  screen, then dismisses back to the idle screen and the schedule engine
+  moves on to the next mark.
 
 ### Debug mode
 
@@ -149,8 +153,7 @@ rather than building the whole thing blind:
 3. Schedule engine with `DEBUG_FAST_SCHEDULE`: verify reminders fire at the
    compressed interval, respect the (compressed or real) window boundaries.
 4. Touch dismiss: verify tap-anywhere clears the alert and resets state.
-5. Buzzer/beep: verify audible on alert.
-6. Final: disable debug mode, confirm normal compile/flash, leave running
+5. Final: disable debug mode, confirm normal compile/flash, leave running
    to observe one real 30-minute cycle during work hours.
 
 ## Libraries / dependencies
@@ -163,7 +166,8 @@ All already installed in this environment, no new installs required:
 
 ## Open items resolved during design
 
-- Alert style: full-screen + tap-to-dismiss + audible beep.
+- Alert style: full-screen + tap-to-dismiss (audio deferred, no speaker
+  hardware yet).
 - Time source: WiFi + NTP (`Europe/Dublin`, DST-aware).
 - Idle screen: clock + next-reminder countdown.
 - WiFi credentials: on-device captive portal, nothing in git.
