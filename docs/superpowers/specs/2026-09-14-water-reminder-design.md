@@ -97,10 +97,13 @@ Each loop tick, using the current local time:
 Two screens, using `TFT_eSPI` (configured for FNK0114B) and `TFT_Touch`
 exactly as calibrated in the Freenove example sketches:
 
-- **Idle screen**: current time in 12-hour format with AM/PM, bold and
-  ~20% larger than the original clock text, a thin divider beneath it, day
-  of week, and a status pill showing either "Next reminder: HH:MM" (inside
-  window) or "Outside work hours" (outside window).
+- **Idle screen**: current time in 12-hour format with AM/PM, using
+  TFT_eSPI Font 6 (48px, bold, includes lowercase a/p/m natively — the
+  library's built-in fonts are fixed sizes, not percentage-scalable; Font
+  6 is the next size up from the original Font 4/26px clock, ~85% larger),
+  a thin divider beneath it, day of week, and a status pill showing either
+  "Next reminder: HH:MM" (inside window) or "Outside work hours" (outside
+  window).
 - **Alert screen**: full-screen message ("Drink Water!" or similar) with
   a continuously cycling background flash (red → amber → green, matching
   the idle clock's ~2x text size for the headline), and a small drawn
