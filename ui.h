@@ -5,16 +5,29 @@
 #include <TFT_eSPI.h>
 #include <time.h>
 
-// Renders the idle screen: current local time, weekday, and a status
-// line (e.g. "Next reminder: 10:30", "Outside work hours",
-// "Time not synced"). Clears and redraws the whole screen each call —
-// callers should only call this when something has actually changed
-// (e.g. once per second), not every loop() tick.
+// Paints the whole idle screen from scratch, clearing it first: the
+// 12-hour clock with AM/PM, a divider, the weekday, and a status pill.
+// Call this once when entering the idle state (e.g. at boot, or when
+// returning from an alert) — NOT every tick, since the full clear is
+// what causes visible flicker.
 void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);
 
-// Renders the full-screen reminder alert. Caller is responsible for
-// polling touch.Pressed() afterward and returning to the idle screen
-// (via uiDrawIdleScreen) once the user taps.
-void uiDrawAlertScreen(TFT_eSPI &tft);
+// Updates the idle screen in place, repainting only the parts whose
+// content actually changed since the last call. Never clears the
+// screen, so it can be called freely without flicker. Returns quickly
+// when nothing has changed.
+//
+// Call uiDrawIdleScreen() first to establish the screen; this function
+// tracks what it last drew and diffs against it.
+void uiUpdateIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);
+
+// The alert screen cycles through these background colors while flashing.
+enum AlertFlashColor { ALERT_RED, ALERT_AMBER, ALERT_GREEN };
+
+// Renders one frame of the full-screen reminder alert in the given flash
+// color: a small drawn glass-of-water icon, "DRINK WATER", no subtext.
+// Caller drives the color cycling and the dismiss timing/logic (tap or
+// timeout) — this just paints one frame per call.
+void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color);
 
 #endif

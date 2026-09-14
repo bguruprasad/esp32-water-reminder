@@ -15,6 +15,24 @@ static AppState appState = STATE_IDLE;
 static struct tm lastFiredMark;
 static bool lastFiredMarkInitialized = false;
 
+// Alert flash/dismiss state. The alert cycles background colors every
+// ALERT_FLASH_STEP_MS and auto-dismisses after ALERT_DURATION_MS if not
+// tapped first.
+static const unsigned long ALERT_DURATION_MS = 10000;
+static const unsigned long ALERT_FLASH_STEP_MS = 400;
+static unsigned long alertStartedAtMs = 0;
+static unsigned long lastFlashStepAtMs = 0;
+static AlertFlashColor alertColor = ALERT_RED;
+
+static AlertFlashColor nextAlertColor(AlertFlashColor c) {
+  switch (c) {
+    case ALERT_RED:   return ALERT_AMBER;
+    case ALERT_AMBER: return ALERT_GREEN;
+    case ALERT_GREEN: return ALERT_RED;
+    default:           return ALERT_RED;
+  }
+}
+
 static String buildStatusLine(const struct tm &nowLocal) {
   if (!timeSyncIsValid()) {
     return "Time not synced";
@@ -69,27 +87,40 @@ void loop() {
   localtime_r(&now, &nowLocal);
 
   if (appState == STATE_IDLE) {
-    static int lastDrawnSecond = -1;
-    if (nowLocal.tm_sec != lastDrawnSecond) {
-      lastDrawnSecond = nowLocal.tm_sec;
-      uiDrawIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
-    }
+    // Partial update: repaints only the parts that actually changed, so
+    // there is no full-screen clear (and therefore no flicker) on the
+    // ticks where nothing is different. The clock shows no seconds, so
+    // in practice this redraws about once a minute.
+    uiUpdateIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&
         scheduleIsMarkDue(nowLocal, lastFiredMark)) {
       appState = STATE_ALERT;
-      uiDrawAlertScreen(tft);
+      alertColor = ALERT_RED;
+      alertStartedAtMs = millis();
+      lastFlashStepAtMs = alertStartedAtMs;
+      uiDrawAlertScreen(tft, alertColor);
     }
   } else { // STATE_ALERT
-    if (touch.Pressed()) {
-      delay(50); // debounce, matches pattern from Freenove touch examples
+    unsigned long elapsedMs = millis() - alertStartedAtMs;
+    bool tapped = touch.Pressed();
+    bool timedOut = elapsedMs >= ALERT_DURATION_MS;
+
+    if (tapped || timedOut) {
+      if (tapped) {
+        delay(50); // debounce, matches pattern from Freenove touch examples
+      }
       // The mark that just fired is scheduleNextMark() of the PREVIOUS
       // lastFiredMark — not nowLocal (the tap time) — so the grid stays
       // aligned to :00/:30 regardless of how long the alert was showing
-      // before the user tapped.
+      // before it was dismissed (by tap or timeout).
       lastFiredMark = scheduleNextMark(nowLocal, lastFiredMark);
       appState = STATE_IDLE;
       uiDrawIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
+    } else if (millis() - lastFlashStepAtMs >= ALERT_FLASH_STEP_MS) {
+      lastFlashStepAtMs = millis();
+      alertColor = nextAlertColor(alertColor);
+      uiDrawAlertScreen(tft, alertColor);
     }
   }
 }
