@@ -59,9 +59,16 @@ static void paintClockRow(TFT_eSPI &tft, const char *digitsBuf, const char *ampm
   // numeric Font 6 is thin-stroked, not bold): large digits at 24pt, a
   // smaller AM/PM label at 12pt beside them, like a real clock face.
   //
-  // Both runs are drawn with BL_DATUM on ONE shared baseline, so the
-  // AM/PM sits flush with the bottom of the digits. Anchoring by cell
-  // height instead would drop it by the font's descender space.
+  // Both runs are drawn with L_BASELINE on ONE shared baseline, so the
+  // AM/PM sits flush with the bottom of the digits.
+  //
+  // L_BASELINE, not BL_DATUM: for a free font drawString() first does
+  // poY += glyph_ab, then BL_DATUM subtracts (glyph_ab + glyph_bb) —
+  // netting poY - glyph_bb, i.e. it anchors the DESCENDER bottom, not
+  // the baseline. The 24pt digits have a deeper descender than the 12pt
+  // label, so sharing a BL_DATUM line pushed the label's baseline lower
+  // than the digits'. L_BASELINE subtracts exactly glyph_ab, cancelling
+  // the adjustment and making poY the true baseline for both sizes.
   const int digitsHeight = 56; // FreeSansBold24pt7b yAdvance
   int bandTop = IDLE_CLOCK_Y - digitsHeight / 2 - 2;
   tft.fillRect(0, bandTop, TFT_HRES, digitsHeight + 4, TFT_BLACK);
@@ -75,9 +82,11 @@ static void paintClockRow(TFT_eSPI &tft, const char *digitsBuf, const char *ampm
 
   int totalWidth = digitsWidth + IDLE_AMPM_GAP + ampmWidth;
   int digitsLeftX = TFT_HRES / 2 - totalWidth / 2;
-  int baselineY = IDLE_CLOCK_Y + digitsHeight / 2;
+  // Baseline sits an ascent below the band top (~3/4 of yAdvance for this
+  // face), leaving the descender space below it inside the band.
+  int baselineY = IDLE_CLOCK_Y - digitsHeight / 2 + (digitsHeight * 3) / 4;
 
-  tft.setTextDatum(BL_DATUM);
+  tft.setTextDatum(L_BASELINE);
 
   tft.setFreeFont(&FreeSansBold24pt7b);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -114,7 +123,10 @@ static void paintStatusPill(TFT_eSPI &tft, const char *statusLine) {
                     IDLE_PILL_H / 2, TFT_NAVY);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_CYAN, TFT_NAVY);
-  tft.drawString(statusLine, TFT_HRES / 2, IDLE_PILL_Y);
+  // Nudged up 2px: MC_DATUM centres on the font's full cell (ascent plus
+  // descender), but this label has no descenders, so centring on the cell
+  // leaves its visual mass sitting low in the pill.
+  tft.drawString(statusLine, TFT_HRES / 2, IDLE_PILL_Y - 2);
   tft.setFreeFont(NULL);
 }
 
@@ -129,7 +141,8 @@ void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &st
   paintClockRow(tft, digitsBuf, ampmStr);
 
   // Divider line beneath the clock. Static, so only the full paint draws it.
-  int dividerHalfWidth = TFT_HRES / 5;
+  // 7/25 of the width per side (~179px total), 40% longer than the 1/5 it was.
+  int dividerHalfWidth = (TFT_HRES * 7) / 25;
   tft.drawFastHLine(TFT_HRES / 2 - dividerHalfWidth, IDLE_DIVIDER_Y,
                     dividerHalfWidth * 2, TFT_DARKGREY);
 
