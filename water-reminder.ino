@@ -1,7 +1,10 @@
 #include "config.h"
 #include "wifi_setup.h"
+#include "time_sync.h"
+#include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
+#include <time.h>
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_Touch touch = TFT_Touch(TOUCH_DCS, TOUCH_DCLK, TOUCH_DIN, TOUCH_DOUT);
@@ -27,8 +30,20 @@ void setup() {
   }
 
   tft.fillScreen(TFT_BLACK);
-  tft.drawString("WiFi connected!", TFT_HRES / 2, TFT_VRES / 2, 2);
+  tft.drawString("Syncing time...", TFT_HRES / 2, TFT_VRES / 2, 2);
+  timeSyncStart();
 }
 
 void loop() {
+  static int lastDrawnSecond = -1;
+
+  time_t now = time(nullptr);
+  struct tm nowLocal;
+  localtime_r(&now, &nowLocal);
+
+  if (nowLocal.tm_sec != lastDrawnSecond) {
+    lastDrawnSecond = nowLocal.tm_sec;
+    String status = timeSyncIsValid() ? "" : "Time not synced";
+    uiDrawIdleScreen(tft, nowLocal, status);
+  }
 }

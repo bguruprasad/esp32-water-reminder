@@ -15,4 +15,7 @@
 // end-to-end testing. Must be OFF for real use.
 //#define DEBUG_FAST_SCHEDULE
 
+// Europe/Dublin POSIX TZ string (auto-handles DST: GMT in winter, IST in summer)
+#define WATER_REMINDER_TZ "GMT0IST,M3.5.0/1,M10.5.0"
+
 #endif
