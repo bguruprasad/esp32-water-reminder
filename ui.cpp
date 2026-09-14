@@ -234,7 +234,9 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color) {
   tft.setTextDatum(MC_DATUM);
   tft.setFreeFont(&FreeSansBold24pt7b);
   tft.setTextColor(TFT_WHITE, bg);
-  tft.drawString("DRINK", TFT_HRES / 2, TFT_VRES / 2 + 20);
-  tft.drawString("WATER", TFT_HRES / 2, TFT_VRES / 2 + 70);
+  // Pulled up 18px to sit closer under the glass icon (which stays at
+  // its current height); line spacing between the two words is unchanged.
+  tft.drawString("DRINK", TFT_HRES / 2, TFT_VRES / 2 + 2);
+  tft.drawString("WATER", TFT_HRES / 2, TFT_VRES / 2 + 52);
   tft.setFreeFont(NULL); // restore default GLCD/bitmap font for other screens
 }
