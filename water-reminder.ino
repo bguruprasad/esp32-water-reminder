@@ -2,6 +2,7 @@
 #include "wifi_setup.h"
 #include "time_sync.h"
 #include "ui.h"
+#include "schedule.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
 #include <time.h>
