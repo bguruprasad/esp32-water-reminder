@@ -657,8 +657,14 @@ Inside the `if (appState == STATE_IDLE)` branch, after the `uiUpdateIdleScreen(.
     } else if (millis() - lastTickerFrameMs >= TICKER_FRAME_MS) {
       lastTickerFrameMs = millis();
       tickerScrollPx += TICKER_SCROLL_STEP_PX;
-      if (tickerScrollPx > 4000) tickerScrollPx = 0; // wrap well past the content
-      uiDrawTickerBand(tft, tickerScrollPx);
+      // Wrap against the real content width that the renderer reports,
+      // not a guessed constant. An oversized constant leaves the band
+      // blank for thousands of pixels of travel and then snaps back
+      // visibly; wrapping on the actual width loops it continuously.
+      int contentWidth = uiDrawTickerBand(tft, tickerScrollPx);
+      if (contentWidth > 0 && tickerScrollPx >= contentWidth) {
+        tickerScrollPx = 0;
+      }
       tickerBandVisible = true;
     }
 ```

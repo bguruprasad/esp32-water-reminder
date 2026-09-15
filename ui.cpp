@@ -260,7 +260,7 @@ static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t colo
   }
 }
 
-void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
+int uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
   uiClearTickerBand(tft);
 
   int textY = TICKER_BAND_TOP + TICKER_BAND_H / 2;
@@ -271,11 +271,12 @@ void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
     tft.drawString("Ticker: no API key", 8, textY, 2);
     tft.setTextDatum(MC_DATUM);
-    return;
+    return 0; // nothing laid out, so nothing for the caller to wrap against
   }
 
   const int entryGap = 28;
   int x = -scrollOffsetPx;
+  int totalWidth = 0;
 
   for (int i = 0; i < tickerSymbolCount(); i++) {
     String sym;
@@ -290,28 +291,37 @@ void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
       snprintf(buf, sizeof(buf), "%s --", sym.c_str());
     }
 
-    int w = tft.textWidth(buf, 2);
+    // Measure the entry's FULL width up front, independently of whether
+    // it is visible. Accumulating the arrow/percent width only inside the
+    // visibility branch would give an entry a different stride depending
+    // on where it happened to be on screen, so the layout — and the total
+    // width the caller wraps against — would drift as it scrolled.
+    int textW = tft.textWidth(buf, 2);
+    char pctBuf[16];
+    int entryW = textW;
+    if (valid) {
+      snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+      entryW += 16 + tft.textWidth(pctBuf, 2);
+    }
 
-    // Skip entries entirely off-screen; keeps the loop cheap.
-    if (x + w > 0 && x < TFT_HRES) {
+    // Draw only what is on screen; keeps the loop cheap.
+    if (x + entryW > 0 && x < TFT_HRES) {
       tft.setTextColor(TFT_WHITE, TFT_BLACK);
       tft.drawString(buf, x, textY, 2);
 
       if (valid) {
         bool up = pct >= 0.0f;
         uint16_t c = up ? TFT_GREEN : TFT_RED;
-        drawTrendArrow(tft, x + w + 8, textY, up, c);
-
-        char pctBuf[16];
-        snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+        drawTrendArrow(tft, x + textW + 8, textY, up, c);
         tft.setTextColor(c, TFT_BLACK);
-        tft.drawString(pctBuf, x + w + 16, textY, 2);
-        w += 16 + tft.textWidth(pctBuf, 2);
+        tft.drawString(pctBuf, x + textW + 16, textY, 2);
       }
     }
 
-    x += w + entryGap;
+    x += entryW + entryGap;
+    totalWidth += entryW + entryGap;
   }
 
   tft.setTextDatum(MC_DATUM); // restore the datum the other screens expect
+  return totalWidth;
 }
