@@ -108,6 +108,11 @@ static void fetchSymbol(int index) {
   NetworkClientSecure client;
   client.setInsecure(); // see spec: deliberate, Cloudflare cert rotation
   HTTPClient http;
+  // setTimeout bounds the read phase only. Without setConnectTimeout the
+  // TCP connect and TLS handshake are governed by a separate, longer
+  // default, so a half-open connection could stall loop() well past 5s.
+  // Both are capped so the worst-case stall is bounded.
+  http.setConnectTimeout(5000);
   http.setTimeout(5000);
 
   String url = "https://finnhub.io/api/v1/quote?symbol=";

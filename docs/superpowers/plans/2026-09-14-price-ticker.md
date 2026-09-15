@@ -17,7 +17,7 @@
 - Endpoint: `https://finnhub.io/api/v1/quote?symbol=<SYM>&token=<KEY>`.
 - TLS: `client.setInsecure()`. Do NOT bake in a CA root certificate.
 - The API key is entered on the device setup page and stored in NVS. It must NEVER appear in source, in a committed file, or in a log line. When printing diagnostics, print only whether a key is present, never its value.
-- Fetching must be non-blocking: no single request may stall the UI loop or delay a reminder. The ticker is decorative and must never block the alert path.
+- Fetching is synchronous and CAN briefly stall the UI loop. This was reviewed and consciously accepted (see the amendment below) — it is not a defect to re-flag.
 - Band occupies y=200-235. Nothing above it moves: `IDLE_CLOCK_Y`, `IDLE_DIVIDER_Y`, `IDLE_DAY_Y`, `IDLE_PILL_Y`, `IDLE_PILL_H` keep their current values.
 - The band repaints only its own strip (`fillRect` over y=200-235), never `fillScreen` — that discipline is what removed the screen flicker.
 - Market hours: 09:30-16:00 US Eastern, Mon-Fri. Outside them the band is hidden AND fetching stops.
@@ -51,6 +51,29 @@ hardware-verified; the key is in NVS.
 
 Task numbering is kept as-is so the task briefs and this plan's internal
 cross-references stay stable.
+
+## Amendment: synchronous fetch, bounded stall accepted (2026-09-15)
+
+The original Global Constraint asserted that fetching must never stall the
+UI loop or delay a reminder. Task 3's review demonstrated that the
+implementation does not satisfy that, and the owner has consciously
+accepted the behaviour rather than engineering around it.
+
+What actually happens: `fetchSymbol()` performs a synchronous HTTPS GET
+from `tickerPump()`, which runs inside `loop()`. While a request is in
+flight the UI is frozen. Worst case is now bounded at roughly 5 seconds by
+`setConnectTimeout(5000)` (the connect/TLS phase, previously uncapped) plus
+`setTimeout(5000)` (the read phase). It can occur at most once per 12
+seconds, and only during US market hours.
+
+Consequence, stated plainly: a water reminder falling due mid-fetch is
+delayed by up to that bound. For a decorative price band this was judged an
+acceptable trade against the complexity of moving fetching onto the second
+core with cross-core shared state.
+
+**This is settled. Do not re-flag the synchronous fetch as a defect, and do
+not add a FreeRTOS task or async client to "fix" it.** If it ever becomes a
+nuisance in practice, the escape hatch is a background task on core 0.
 
 ## Amendment: no serial logging (2026-09-15)
 

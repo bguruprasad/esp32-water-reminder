@@ -17,7 +17,7 @@ don't have to remember on their own.
 - Reminder must be hard to miss: full-screen visual alert. Audible beep is
   deferred (see Non-goals) since no external speaker/buzzer is attached yet.
 - Reminder is dismissed either by tapping the touchscreen anywhere (early
-  dismiss) or automatically after a 10-second flashing alert if untapped;
+  dismiss) or automatically after a 30-second flashing alert if untapped;
   either way, dismissing returns to the idle screen and resets the timer
   toward the next 30-minute mark.
 - No reminders fire outside the configured window (evenings, weekends,
@@ -155,9 +155,9 @@ exactly as calibrated in the Freenove example sketches:
   glass-of-water icon above the text (built from basic filled shapes —
   TFT_eSPI has no emoji font, so this is a native shape-drawn icon, not a
   Unicode glyph). No instructional subtext — the flash, icon, and headline
-  are the whole message. No audio (see Non-goals). Runs for up to 10
+  are the whole message. No audio (see Non-goals). Runs for up to 30
   seconds; tapping anywhere during that window dismisses immediately,
-  otherwise it auto-dismisses at the 10s mark. Either path returns to the
+  otherwise it auto-dismisses at the 30s mark. Either path returns to the
   idle screen and the schedule engine moves on to the next mark.
 
 ### Debug mode

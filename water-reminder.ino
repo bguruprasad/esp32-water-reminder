@@ -18,7 +18,7 @@ static bool lastFiredMarkInitialized = false;
 // Alert flash/dismiss state. The alert cycles background colors every
 // ALERT_FLASH_STEP_MS and auto-dismisses after ALERT_DURATION_MS if not
 // tapped first.
-static const unsigned long ALERT_DURATION_MS = 10000;
+static const unsigned long ALERT_DURATION_MS = 30000;
 static const unsigned long ALERT_FLASH_STEP_MS = 400;
 static unsigned long alertStartedAtMs = 0;
 static unsigned long lastFlashStepAtMs = 0;
