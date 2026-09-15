@@ -30,4 +30,12 @@ enum AlertFlashColor { ALERT_RED, ALERT_AMBER, ALERT_GREEN };
 // timeout) — this just paints one frame per call.
 void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color);
 
+// Renders the share-price band along the bottom strip (y=200-235),
+// scrolled left by scrollOffsetPx. Repaints only its own strip, never
+// the whole screen, so it does not reintroduce flicker.
+void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx);
+
+// Blanks the band's strip — used when the market is shut.
+void uiClearTickerBand(TFT_eSPI &tft);
+
 #endif

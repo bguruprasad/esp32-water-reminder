@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "config.h"
+#include "ticker.h"
 #include <string.h> // strcmp, for diffing what's already on screen
 // FreeSansBold24pt7b is already pulled in transitively via TFT_eSPI.h ->
 // gfxfont.h (which includes all 48 GFXFF fonts when LOAD_GFXFF is
@@ -239,4 +240,78 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color) {
   tft.drawString("DRINK", TFT_HRES / 2, TFT_VRES / 2 + 2);
   tft.drawString("WATER", TFT_HRES / 2, TFT_VRES / 2 + 52);
   tft.setFreeFont(NULL); // restore default GLCD/bitmap font for other screens
+}
+
+static const int TICKER_BAND_TOP = 200;
+static const int TICKER_BAND_H   = 35;
+
+void uiClearTickerBand(TFT_eSPI &tft) {
+  tft.fillRect(0, TICKER_BAND_TOP, TFT_HRES, TICKER_BAND_H, TFT_BLACK);
+}
+
+// Draws a small up/down triangle — shape-drawn, since there is no emoji
+// font (the same reason the alert screen's glass is drawn by hand).
+static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t color) {
+  const int halfW = 4, halfH = 4;
+  if (up) {
+    tft.fillTriangle(cx, cy - halfH, cx - halfW, cy + halfH, cx + halfW, cy + halfH, color);
+  } else {
+    tft.fillTriangle(cx, cy + halfH, cx - halfW, cy - halfH, cx + halfW, cy - halfH, color);
+  }
+}
+
+void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
+  uiClearTickerBand(tft);
+
+  int textY = TICKER_BAND_TOP + TICKER_BAND_H / 2;
+  tft.setTextDatum(ML_DATUM);
+  tft.setFreeFont(NULL);
+
+  if (!tickerHasApiKey()) {
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.drawString("Ticker: no API key", 8, textY, 2);
+    tft.setTextDatum(MC_DATUM);
+    return;
+  }
+
+  const int entryGap = 28;
+  int x = -scrollOffsetPx;
+
+  for (int i = 0; i < tickerSymbolCount(); i++) {
+    String sym;
+    float price, pct;
+    bool valid;
+    if (!tickerEntry(i, sym, price, pct, valid)) continue;
+
+    char buf[40];
+    if (valid) {
+      snprintf(buf, sizeof(buf), "%s %.2f", sym.c_str(), price);
+    } else {
+      snprintf(buf, sizeof(buf), "%s --", sym.c_str());
+    }
+
+    int w = tft.textWidth(buf, 2);
+
+    // Skip entries entirely off-screen; keeps the loop cheap.
+    if (x + w > 0 && x < TFT_HRES) {
+      tft.setTextColor(TFT_WHITE, TFT_BLACK);
+      tft.drawString(buf, x, textY, 2);
+
+      if (valid) {
+        bool up = pct >= 0.0f;
+        uint16_t c = up ? TFT_GREEN : TFT_RED;
+        drawTrendArrow(tft, x + w + 8, textY, up, c);
+
+        char pctBuf[16];
+        snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+        tft.setTextColor(c, TFT_BLACK);
+        tft.drawString(pctBuf, x + w + 16, textY, 2);
+        w += 16 + tft.textWidth(pctBuf, 2);
+      }
+    }
+
+    x += w + entryGap;
+  }
+
+  tft.setTextDatum(MC_DATUM); // restore the datum the other screens expect
 }
