@@ -24,6 +24,20 @@ for the full design.
 
 No WiFi credentials are ever stored in this repository.
 
+## Price ticker
+
+The bottom of the idle screen shows a scrolling share-price band
+(AAPL, MSFT, GOOGL, AMZN, NVDA), hidden outside US market hours
+(09:30-16:00 ET, Mon-Fri).
+
+It needs a free Finnhub API key from https://finnhub.io/register. Enter
+it in the third field of the device's setup page, alongside your WiFi
+details. The key is stored on the device and never appears in this
+repository — leave the field blank to run without the ticker.
+
+Prices refresh one symbol every 12 seconds, so all five update each
+minute — comfortably inside Finnhub's free rate limit.
+
 ## Building and flashing
 
 Requires `arduino-cli` with the `esp32:esp32` core (3.3.11) installed, and
