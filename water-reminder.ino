@@ -111,7 +111,7 @@ void loop() {
 
     tickerPump(); // non-blocking; at most one fetch per 12s, market hours only
 
-    bool marketOpen = tickerIsMarketOpen(nowLocal);
+    bool marketOpen = tickerIsMarketOpen(now); // epoch, not local time
     if (!marketOpen) {
       if (tickerBandVisible) { // hide once, not every tick
         uiClearTickerBand(tft);
@@ -153,11 +153,19 @@ void loop() {
       if (tapped) {
         delay(50); // debounce, matches pattern from Freenove touch examples
       }
-      // The mark that just fired is scheduleNextMark() of the PREVIOUS
-      // lastFiredMark — not nowLocal (the tap time) — so the grid stays
-      // aligned to :00/:30 regardless of how long the alert was showing
-      // before it was dismissed (by tap or timeout).
-      lastFiredMark = scheduleNextMark(nowLocal, lastFiredMark);
+      // Jump to the most recent grid mark at or before now, rather than
+      // advancing a single step from the previous value.
+      //
+      // Stepping by one interval only worked if no mark had been missed.
+      // If the device sat idle across several marks (asleep, off, or just
+      // outside the window), lastFiredMark was hours stale, so advancing
+      // it by 30 minutes left it STILL in the past — scheduleIsMarkDue()
+      // fired again on the very next loop pass, and the alert reappeared
+      // the instant it was dismissed, once per missed half-hour.
+      //
+      // Flooring to now collapses any backlog into this one dismissal
+      // while keeping the :00/:30 grid alignment.
+      lastFiredMark = scheduleFloorToMark(nowLocal);
       appState = STATE_IDLE;
       uiDrawIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
       tickerBandVisible = false; // full repaint wiped the band; let it redraw

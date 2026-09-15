@@ -74,15 +74,24 @@ static bool usesUsDst(const struct tm &utc) {
   return utc.tm_mday < firstSundayDom; // November: before the first Sunday
 }
 
-bool tickerIsMarketOpen(const struct tm &nowLocalDublin) {
-  // Dublin local -> UTC. tm_isdst carries whether IST is in effect.
-  struct tm copy = nowLocalDublin;
-  time_t asEpoch = mktime(&copy); // interprets as local (Dublin) time
+bool tickerIsMarketOpen(time_t nowEpochUtc) {
+  // Takes the epoch directly rather than a local struct tm.
+  //
+  // This previously accepted Dublin local time and called mktime() to get
+  // back to an epoch. That worked on the host but NOT on the device:
+  // mktime() is the one call here that depends on tm_isdst, and newlib
+  // (ESP32) and glibc (the machine the logic was tested on) differ in how
+  // they resolve it. The result was a market-hours check that passed every
+  // host test and still reported "open" at 18:15 ET on real hardware.
+  //
+  // The round-trip was never needed. An epoch is already absolute UTC, and
+  // the caller has one before it converts to local time at all, so ET is
+  // just an offset away with no local-time conversion in the path.
   struct tm utc;
-  gmtime_r(&asEpoch, &utc);
+  gmtime_r(&nowEpochUtc, &utc);
 
   int etOffsetHours = usesUsDst(utc) ? -4 : -5;
-  time_t etEpoch = asEpoch + (time_t)etOffsetHours * 3600;
+  time_t etEpoch = nowEpochUtc + (time_t)etOffsetHours * 3600;
   struct tm et;
   gmtime_r(&etEpoch, &et); // gmtime on a shifted epoch yields ET wall time
 
@@ -142,10 +151,7 @@ void tickerPump() {
   if (apiKey.length() == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
 
-  time_t now = time(nullptr);
-  struct tm nowLocal;
-  localtime_r(&now, &nowLocal);
-  if (!tickerIsMarketOpen(nowLocal)) return; // no fetching while shut
+  if (!tickerIsMarketOpen(time(nullptr))) return; // no fetching while shut
 
   if (millis() - lastFetchAtMs < TICKER_FETCH_INTERVAL_MS) return;
   lastFetchAtMs = millis();

@@ -28,9 +28,10 @@ No WiFi credentials are ever stored in this repository.
 
 The bottom of the idle screen shows a share-price band covering AAPL,
 MSFT, GOOGL, AMZN, NVDA, META, TSLA and NFLX. Two symbols are shown at a
-time in bold, swapping to the next pair every 5 seconds, so the full set
-comes round every 20 seconds. The band is hidden outside US market hours
-(09:30-16:00 ET, Mon-Fri).
+time in bold — each on two lines, the ticker symbol above its price and
+percent change — swapping to the next pair every 5 seconds, so the full
+set comes round every 20 seconds. The band is hidden outside US market
+hours (09:30-16:00 ET, Mon-Fri).
 
 It needs a free Finnhub API key from https://finnhub.io/register. Enter
 it in the third field of the device's setup page, alongside your WiFi

@@ -21,7 +21,11 @@ static int to12Hour(int hour24, bool *isAm) {
 
 // Fixed vertical layout of the idle screen. Kept as named constants so
 // the full paint and the partial update agree on where things live.
-static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 34;          // vertical middle of the big digits
+// Shifted up 12px from TFT_VRES/2 - 34 to free vertical space for the
+// two-line ticker band below. Everything under it derives from this
+// constant, so the spacing tuned by hand (divider length, weekday gap,
+// the pill's 2px nudge) is preserved — the whole block just sits higher.
+static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 46;          // vertical middle of the big digits
 static const int IDLE_DIVIDER_Y = IDLE_CLOCK_Y + 34;
 // Weekday sits 2px higher than it used to, which opens up both the gap
 // above it (divider -> weekday) and the one below (weekday -> pill).
@@ -242,8 +246,13 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color) {
   tft.setFreeFont(NULL); // restore default GLCD/bitmap font for other screens
 }
 
-static const int TICKER_BAND_TOP = 200;
-static const int TICKER_BAND_H   = 35;
+// Two-line band. The idle stack above now ends at y≈171 (pill bottom),
+// so the band starts at 178 and runs to the bottom edge: 62px, enough
+// for two 22px lines of FreeSansBold9pt7b plus padding. A single 35px
+// line could not fit "GOOGL $333.08 ▲0.24%" across a half-width column
+// at bold weight, which is what caused the columns to overlap.
+static const int TICKER_BAND_TOP = 178;
+static const int TICKER_BAND_H   = 62;
 
 void uiClearTickerBand(TFT_eSPI &tft) {
   tft.fillRect(0, TICKER_BAND_TOP, TFT_HRES, TICKER_BAND_H, TFT_BLACK);
@@ -272,51 +281,63 @@ int uiTickerPageCount() {
   return (n + TICKER_PER_PAGE - 1) / TICKER_PER_PAGE; // round up
 }
 
-// Draws one symbol left-aligned within the column starting at colX.
-static void drawTickerEntry(TFT_eSPI &tft, int index, int colX, int textY) {
+// Draws one entry on two lines within the column starting at colX:
+// the symbol on top, then the price and percent change beneath it.
+// Splitting across two lines is what lets both columns hold full bold
+// text without colliding.
+static void drawTickerEntry(TFT_eSPI &tft, int index, int colX, int lineOneY,
+                            int lineTwoY) {
   String sym;
   float price, pct;
   bool valid;
   if (!tickerEntry(index, sym, price, pct, valid)) return;
 
-  char buf[40];
-  if (valid) {
-    snprintf(buf, sizeof(buf), "%s %.2f", sym.c_str(), price);
-  } else {
-    snprintf(buf, sizeof(buf), "%s --", sym.c_str());
-  }
-
   tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(buf, colX, textY);
-  int textW = tft.textWidth(buf);
 
-  if (!valid) {
+  // Line one: the symbol, which is what the eye looks for first.
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(sym, colX, lineOneY);
+
+  if (!valid) { // no successful fetch for this symbol yet
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.drawString("--", colX, lineTwoY);
     tft.setFreeFont(NULL);
     return;
   }
 
+  // Line two: "$333.08" then the arrow and percent, coloured by direction.
+  char priceBuf[16];
+  snprintf(priceBuf, sizeof(priceBuf), "$%.2f", price);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(priceBuf, colX, lineTwoY);
+  int priceW = tft.textWidth(priceBuf);
+
   bool up = pct >= 0.0f;
   uint16_t c = up ? TFT_GREEN : TFT_RED;
-  drawTrendArrow(tft, colX + textW + 8, textY, up, c);
+  drawTrendArrow(tft, colX + priceW + 10, lineTwoY, up, c);
 
   char pctBuf[16];
   snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
   tft.setTextColor(c, TFT_BLACK);
-  tft.drawString(pctBuf, colX + textW + 16, textY);
+  tft.drawString(pctBuf, colX + priceW + 18, lineTwoY);
   tft.setFreeFont(NULL);
 }
 
 void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex) {
   uiClearTickerBand(tft);
 
-  int textY = TICKER_BAND_TOP + TICKER_BAND_H / 2;
+  // Two 22px lines inside the 62px band, with even padding above, between
+  // and below: symbol on the first line, price and change on the second.
+  const int lineOneY = TICKER_BAND_TOP + 18;
+  const int lineTwoY = TICKER_BAND_TOP + 44;
+  const int centreY  = TICKER_BAND_TOP + TICKER_BAND_H / 2;
+
   tft.setTextDatum(ML_DATUM);
   tft.setFreeFont(NULL);
 
   if (!tickerHasApiKey()) {
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.drawString("Ticker: no API key", 8, textY, 2);
+    tft.drawString("Ticker: no API key", 8, centreY, 2);
     tft.setTextDatum(MC_DATUM);
     return;
   }
@@ -334,7 +355,7 @@ void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex) {
   for (int slot = 0; slot < TICKER_PER_PAGE; slot++) {
     int index = first + slot;
     if (index >= tickerSymbolCount()) break; // short final page, if any
-    drawTickerEntry(tft, index, slot * colW + 8, textY);
+    drawTickerEntry(tft, index, slot * colW + 8, lineOneY, lineTwoY);
   }
 
   tft.setTextDatum(MC_DATUM); // restore the datum the other screens expect
