@@ -294,32 +294,52 @@ static void drawTickerEntry(TFT_eSPI &tft, int index, int colX, int lineOneY,
 
   tft.setFreeFont(&FreeSansBold9pt7b);
 
-  // Line one: the symbol, which is what the eye looks for first.
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(sym, colX, lineOneY);
-
   if (!valid) { // no successful fetch for this symbol yet
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString(sym, colX, lineOneY);
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
     tft.drawString("--", colX, lineTwoY);
     tft.setFreeFont(NULL);
     return;
   }
 
-  // Line two: "$333.08" then the arrow and percent, coloured by direction.
+  // Measure line two before drawing anything, so line one's symbol can be
+  // centred over it. Line two is: "$" + price, a gap, the arrow, a gap,
+  // then the percent.
+  const int arrowGap = 10;  // price -> arrow centre
+  const int pctGap   = 18;  // price -> percent text
+  char dollarBuf[2] = "$";
   char priceBuf[16];
-  snprintf(priceBuf, sizeof(priceBuf), "$%.2f", price);
+  snprintf(priceBuf, sizeof(priceBuf), "%.2f", price);
+  char pctBuf[16];
+  snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+
+  int dollarW = tft.textWidth(dollarBuf);
+  int numberW = tft.textWidth(priceBuf);
+  int pctW    = tft.textWidth(pctBuf);
+  int lineTwoW = dollarW + numberW + pctGap + pctW;
+
+  // Line one: the symbol, centred over line two rather than left-aligned,
+  // so each entry reads as one stacked unit.
+  int symW = tft.textWidth(sym);
+  int symX = colX + (lineTwoW - symW) / 2;
+  if (symX < colX) symX = colX; // never push a long symbol left of its column
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(priceBuf, colX, lineTwoY);
-  int priceW = tft.textWidth(priceBuf);
+  tft.drawString(sym, symX, lineOneY);
+
+  // Line two: the "$" in the same amber as the clock's AM/PM, so the
+  // currency marker reads as a unit label rather than part of the number.
+  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+  tft.drawString(dollarBuf, colX, lineTwoY);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(priceBuf, colX + dollarW, lineTwoY);
 
   bool up = pct >= 0.0f;
   uint16_t c = up ? TFT_GREEN : TFT_RED;
-  drawTrendArrow(tft, colX + priceW + 10, lineTwoY, up, c);
-
-  char pctBuf[16];
-  snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+  int priceEndX = colX + dollarW + numberW;
+  drawTrendArrow(tft, priceEndX + arrowGap, lineTwoY, up, c);
   tft.setTextColor(c, TFT_BLACK);
-  tft.drawString(pctBuf, colX + priceW + 18, lineTwoY);
+  tft.drawString(pctBuf, priceEndX + pctGap, lineTwoY);
   tft.setFreeFont(NULL);
 }
 
