@@ -2,6 +2,7 @@
 #include "wifi_setup.h"
 #include "time_sync.h"
 #include "schedule.h"
+#include "ticker.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -23,6 +24,14 @@ static const unsigned long ALERT_FLASH_STEP_MS = 400;
 static unsigned long alertStartedAtMs = 0;
 static unsigned long lastFlashStepAtMs = 0;
 static AlertFlashColor alertColor = ALERT_RED;
+
+// Ticker band scroll state. The band advances a few pixels per frame
+// while the market is open; it is hidden entirely when shut.
+static const unsigned long TICKER_FRAME_MS = 40; // ~25fps
+static const int TICKER_SCROLL_STEP_PX = 2;
+static unsigned long lastTickerFrameMs = 0;
+static int tickerScrollPx = 0;
+static bool tickerBandVisible = false;
 
 static AlertFlashColor nextAlertColor(AlertFlashColor c) {
   switch (c) {
@@ -79,6 +88,8 @@ void setup() {
   localtime_r(&now, &nowAtBoot);
   lastFiredMark = scheduleFloorToMark(nowAtBoot);
   lastFiredMarkInitialized = true;
+
+  tickerBegin();
 }
 
 void loop() {
@@ -92,6 +103,28 @@ void loop() {
     // ticks where nothing is different. The clock shows no seconds, so
     // in practice this redraws about once a minute.
     uiUpdateIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
+
+    tickerPump(); // non-blocking; at most one fetch per 12s, market hours only
+
+    bool marketOpen = tickerIsMarketOpen(nowLocal);
+    if (!marketOpen) {
+      if (tickerBandVisible) { // hide once, not every tick
+        uiClearTickerBand(tft);
+        tickerBandVisible = false;
+      }
+    } else if (millis() - lastTickerFrameMs >= TICKER_FRAME_MS) {
+      lastTickerFrameMs = millis();
+      tickerScrollPx += TICKER_SCROLL_STEP_PX;
+      // Wrap against the real content width that the renderer reports,
+      // not a guessed constant. An oversized constant leaves the band
+      // blank for thousands of pixels of travel and then snaps back
+      // visibly; wrapping on the actual width loops it continuously.
+      int contentWidth = uiDrawTickerBand(tft, tickerScrollPx);
+      if (contentWidth > 0 && tickerScrollPx >= contentWidth) {
+        tickerScrollPx = 0;
+      }
+      tickerBandVisible = true;
+    }
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&
         scheduleIsMarkDue(nowLocal, lastFiredMark)) {
@@ -117,6 +150,7 @@ void loop() {
       lastFiredMark = scheduleNextMark(nowLocal, lastFiredMark);
       appState = STATE_IDLE;
       uiDrawIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
+      tickerBandVisible = false; // full repaint wiped the band; let it redraw
     } else if (millis() - lastFlashStepAtMs >= ALERT_FLASH_STEP_MS) {
       lastFlashStepAtMs = millis();
       alertColor = nextAlertColor(alertColor);
