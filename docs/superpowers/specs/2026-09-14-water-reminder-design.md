@@ -44,21 +44,27 @@ don't have to remember on their own.
 
 ## Addendum: share price ticker (2026-09-14)
 
-A scrolling share-price band occupies the previously-empty bottom strip of
-the idle screen. It is strictly decorative: it never blocks boot, never
-delays a reminder, and never blocks the alert path.
+A share-price band occupies the previously-empty bottom strip of the idle
+screen. It is strictly decorative: it never blocks boot and never blocks
+the alert path. (It CAN briefly delay a reminder — see "Fetching" below.)
 
 - **Source**: Finnhub (`/api/v1/quote`), free tier, ~60 calls/min. One
   symbol per request.
-- **Symbols**: AAPL, MSFT, GOOGL, AMZN, NVDA.
-- **Refresh**: one symbol fetched every 12s, so all five refresh on a
-  60-second cycle — 5 calls/min against the ~60/min limit. Fetches are
-  non-blocking; no single request may stall the UI loop.
-- **Parsing**: ArduinoJson 7.4.3 (new dependency, ~30KB; 270KB free).
-  Reads current price and percent change per symbol. NOTE: the success
-  payload's exact field names are unverified — no API key was available
-  at planning time — so the field mapping must be confirmed on hardware
-  before the rendering work is built on top of it.
+- **Symbols**: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, NFLX.
+- **Refresh**: one symbol fetched every 12s, so all eight refresh on a
+  96-second cycle — 5 calls/min against the ~60/min limit. The interval
+  sets the request rate, not the symbol count, so adding symbols
+  lengthens the refresh cycle rather than consuming more quota.
+- **Fetching**: synchronous, and it CAN stall the UI loop for up to ~5s
+  (both connect and read timeouts are capped), at most once per 12s and
+  only during market hours. A reminder falling due mid-fetch is delayed
+  by up to that bound. This was reviewed and consciously accepted rather
+  than moving fetching to the second core, which would mean cross-core
+  shared state for a decorative feature.
+- **Parsing**: ArduinoJson 7.4.3 (new dependency, ~30KB). The field
+  mapping was confirmed against a real response: `c` is the current
+  price and `dp` the percent change, both JSON numbers, and `dp` arrives
+  already as a percentage (0.2438 means 0.24%) rather than a fraction.
 - **TLS**: `setInsecure()`, skipping certificate validation. Finnhub sits
   behind Cloudflare and a baked-in CA root would expire and silently
   break the ticker. The accepted risk is that a man-in-the-middle could
@@ -74,9 +80,15 @@ delays a reminder, and never blocks the alert path.
   transcript cannot be un-shared, and a key in a file is one `git add .`
   from entering history, where deleting the file will not remove it.
   Rotate the key at Finnhub if it is ever exposed.
-- **Layout**: purely additive. The band occupies roughly y=200-235; the
-  clock, divider, weekday and status pill keep the positions already
-  tuned on hardware. The band repaints only its own strip, preserving the
+- **Layout**: the band occupies y=178-240 and shows two symbols at a
+  time, each on two lines — the symbol centred above its price and
+  percent change, with the `$` in the same amber as the clock's AM/PM.
+  Pages swap every 5 seconds, so all eight come round every 20 seconds.
+  Fitting two lines required moving the idle stack up: `IDLE_CLOCK_Y`
+  went from `TFT_VRES/2 - 34` to `TFT_VRES/2 - 52`. Everything below the
+  clock derives from that one constant, so the divider, weekday gap and
+  pill nudge tuned on hardware keep their relative spacing and simply
+  move with it. The band repaints only its own strip, preserving the
   partial-redraw discipline that removed the screen flicker.
 - **Market hours**: the band is hidden outside US market hours (09:30-16:00
   ET, Mon-Fri), and fetching stops then too. This requires converting to
