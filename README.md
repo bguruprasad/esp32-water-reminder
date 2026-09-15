@@ -33,7 +33,8 @@ The bottom of the idle screen shows a scrolling share-price band
 It needs a free Finnhub API key from https://finnhub.io/register. Enter
 it in the third field of the device's setup page, alongside your WiFi
 details. The key is stored on the device and never appears in this
-repository — leave the field blank to run without the ticker.
+repository. The field is optional: left blank, no prices are fetched and
+the band reads "Ticker: no API key" during market hours.
 
 Prices refresh one symbol every 12 seconds, so all five update each
 minute — comfortably inside Finnhub's free rate limit.
