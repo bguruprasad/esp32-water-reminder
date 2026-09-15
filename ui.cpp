@@ -25,7 +25,7 @@ static int to12Hour(int hour24, bool *isAm) {
 // two-line ticker band below. Everything under it derives from this
 // constant, so the spacing tuned by hand (divider length, weekday gap,
 // the pill's 2px nudge) is preserved — the whole block just sits higher.
-static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 46;          // vertical middle of the big digits
+static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 52;          // vertical middle of the big digits
 static const int IDLE_DIVIDER_Y = IDLE_CLOCK_Y + 34;
 // Weekday sits 2px higher than it used to, which opens up both the gap
 // above it (divider -> weekday) and the one below (weekday -> pill).
