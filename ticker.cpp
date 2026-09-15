@@ -5,8 +5,13 @@
 #include <NetworkClientSecure.h>
 #include <ArduinoJson.h>
 
-static const char *SYMBOLS[] = {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"};
-static const int SYMBOL_COUNT = 5;
+// Eight symbols, an even number so the two-per-page band divides cleanly
+// into four pages with no half-empty slot. At one fetch per 12s a given
+// price refreshes every 96s; the call RATE is unchanged at 5/min, since
+// the interval sets that rather than the symbol count.
+static const char *SYMBOLS[] = {"AAPL", "MSFT", "GOOGL", "AMZN",
+                                "NVDA", "META", "TSLA",  "NFLX"};
+static const int SYMBOL_COUNT = 8;
 static const unsigned long TICKER_FETCH_INTERVAL_MS = 12000;
 
 struct Quote {

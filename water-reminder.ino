@@ -25,12 +25,17 @@ static unsigned long alertStartedAtMs = 0;
 static unsigned long lastFlashStepAtMs = 0;
 static AlertFlashColor alertColor = ALERT_RED;
 
-// Ticker band scroll state. The band advances a few pixels per frame
-// while the market is open; it is hidden entirely when shut.
-static const unsigned long TICKER_FRAME_MS = 40; // ~25fps
-static const int TICKER_SCROLL_STEP_PX = 2;
-static unsigned long lastTickerFrameMs = 0;
-static int tickerScrollPx = 0;
+// Ticker band paging state. The band shows two symbols at a time and
+// swaps to the next pair every TICKER_PAGE_MS; it is hidden entirely
+// when the market is shut.
+//
+// This replaced a scrolling marquee, which had to clear and repaint the
+// whole strip ~25 times a second and visibly flickered. Here the strip
+// is repainted only when the page actually changes — once per 5s — which
+// is the same repaint-on-change discipline that fixed the clock flicker.
+static const unsigned long TICKER_PAGE_MS = 5000;
+static unsigned long lastTickerPageMs = 0;
+static int tickerPage = 0;
 static bool tickerBandVisible = false;
 
 static AlertFlashColor nextAlertColor(AlertFlashColor c) {
@@ -112,18 +117,23 @@ void loop() {
         uiClearTickerBand(tft);
         tickerBandVisible = false;
       }
-    } else if (millis() - lastTickerFrameMs >= TICKER_FRAME_MS) {
-      lastTickerFrameMs = millis();
-      tickerScrollPx += TICKER_SCROLL_STEP_PX;
-      // Wrap against the real content width that the renderer reports,
-      // not a guessed constant. An oversized constant leaves the band
-      // blank for thousands of pixels of travel and then snaps back
-      // visibly; wrapping on the actual width loops it continuously.
-      int contentWidth = uiDrawTickerBand(tft, tickerScrollPx);
-      if (contentWidth > 0 && tickerScrollPx >= contentWidth) {
-        tickerScrollPx = 0;
-      }
+    } else if (!tickerBandVisible) {
+      // Entering market hours (or returning from an alert, which wiped
+      // the strip): draw the current page immediately rather than
+      // waiting out a full dwell with a blank band.
+      lastTickerPageMs = millis();
+      uiDrawTickerPage(tft, tickerPage);
       tickerBandVisible = true;
+    } else if (millis() - lastTickerPageMs >= TICKER_PAGE_MS) {
+      // Dwell elapsed: advance to the next pair. This is the ONLY place
+      // the strip is repainted during steady state — once per 5s, not
+      // ~25 times a second as the old scrolling band did.
+      lastTickerPageMs = millis();
+      int pages = uiTickerPageCount();
+      if (pages > 0) {
+        tickerPage = (tickerPage + 1) % pages;
+      }
+      uiDrawTickerPage(tft, tickerPage);
     }
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&

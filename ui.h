@@ -33,11 +33,18 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color);
 // Renders the share-price band along the bottom strip (y=200-235),
 // scrolled left by scrollOffsetPx. Repaints only its own strip, never
 // the whole screen, so it does not reintroduce flicker.
-// Returns the total width in pixels of the content it laid out (all
-// entries plus their trailing gaps), so the caller can wrap the scroll
-// offset against real content rather than a guessed constant. Returns 0
-// when there is nothing to scroll (e.g. no API key stored).
-int uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx);
+// Renders one page of the share-price band: two symbols side by side, in
+// bold, held static. Pages are instant-swapped by the caller rather than
+// scrolled — a scrolling marquee had to clear and repaint the whole strip
+// ~25 times a second, which visibly flickered.
+//
+// Call this only when the page actually changes (or its data does), not
+// every tick. pageIndex is taken modulo the available page count.
+void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex);
+
+// Number of pages needed to show every symbol two at a time. Returns 0
+// when there is nothing to show (e.g. no API key stored).
+int uiTickerPageCount();
 
 // Blanks the band's strip — used when the market is shut.
 void uiClearTickerBand(TFT_eSPI &tft);

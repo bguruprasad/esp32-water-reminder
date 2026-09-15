@@ -260,7 +260,54 @@ static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t colo
   }
 }
 
-int uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
+// Two symbols per page, each in its own fixed half-width column, so a
+// given symbol always lands in the same place rather than shifting
+// between cycles.
+static const int TICKER_PER_PAGE = 2;
+
+int uiTickerPageCount() {
+  if (!tickerHasApiKey()) return 0;
+  int n = tickerSymbolCount();
+  if (n <= 0) return 0;
+  return (n + TICKER_PER_PAGE - 1) / TICKER_PER_PAGE; // round up
+}
+
+// Draws one symbol left-aligned within the column starting at colX.
+static void drawTickerEntry(TFT_eSPI &tft, int index, int colX, int textY) {
+  String sym;
+  float price, pct;
+  bool valid;
+  if (!tickerEntry(index, sym, price, pct, valid)) return;
+
+  char buf[40];
+  if (valid) {
+    snprintf(buf, sizeof(buf), "%s %.2f", sym.c_str(), price);
+  } else {
+    snprintf(buf, sizeof(buf), "%s --", sym.c_str());
+  }
+
+  tft.setFreeFont(&FreeSansBold9pt7b);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(buf, colX, textY);
+  int textW = tft.textWidth(buf);
+
+  if (!valid) {
+    tft.setFreeFont(NULL);
+    return;
+  }
+
+  bool up = pct >= 0.0f;
+  uint16_t c = up ? TFT_GREEN : TFT_RED;
+  drawTrendArrow(tft, colX + textW + 8, textY, up, c);
+
+  char pctBuf[16];
+  snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+  tft.setTextColor(c, TFT_BLACK);
+  tft.drawString(pctBuf, colX + textW + 16, textY);
+  tft.setFreeFont(NULL);
+}
+
+void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex) {
   uiClearTickerBand(tft);
 
   int textY = TICKER_BAND_TOP + TICKER_BAND_H / 2;
@@ -271,57 +318,24 @@ int uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx) {
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
     tft.drawString("Ticker: no API key", 8, textY, 2);
     tft.setTextDatum(MC_DATUM);
-    return 0; // nothing laid out, so nothing for the caller to wrap against
+    return;
   }
 
-  const int entryGap = 28;
-  int x = -scrollOffsetPx;
-  int totalWidth = 0;
+  int pages = uiTickerPageCount();
+  if (pages <= 0) {
+    tft.setTextDatum(MC_DATUM);
+    return;
+  }
 
-  for (int i = 0; i < tickerSymbolCount(); i++) {
-    String sym;
-    float price, pct;
-    bool valid;
-    if (!tickerEntry(i, sym, price, pct, valid)) continue;
+  int page = ((pageIndex % pages) + pages) % pages; // tolerate any input
+  int first = page * TICKER_PER_PAGE;
+  const int colW = TFT_HRES / TICKER_PER_PAGE;
 
-    char buf[40];
-    if (valid) {
-      snprintf(buf, sizeof(buf), "%s %.2f", sym.c_str(), price);
-    } else {
-      snprintf(buf, sizeof(buf), "%s --", sym.c_str());
-    }
-
-    // Measure the entry's FULL width up front, independently of whether
-    // it is visible. Accumulating the arrow/percent width only inside the
-    // visibility branch would give an entry a different stride depending
-    // on where it happened to be on screen, so the layout — and the total
-    // width the caller wraps against — would drift as it scrolled.
-    int textW = tft.textWidth(buf, 2);
-    char pctBuf[16];
-    int entryW = textW;
-    if (valid) {
-      snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
-      entryW += 16 + tft.textWidth(pctBuf, 2);
-    }
-
-    // Draw only what is on screen; keeps the loop cheap.
-    if (x + entryW > 0 && x < TFT_HRES) {
-      tft.setTextColor(TFT_WHITE, TFT_BLACK);
-      tft.drawString(buf, x, textY, 2);
-
-      if (valid) {
-        bool up = pct >= 0.0f;
-        uint16_t c = up ? TFT_GREEN : TFT_RED;
-        drawTrendArrow(tft, x + textW + 8, textY, up, c);
-        tft.setTextColor(c, TFT_BLACK);
-        tft.drawString(pctBuf, x + textW + 16, textY, 2);
-      }
-    }
-
-    x += entryW + entryGap;
-    totalWidth += entryW + entryGap;
+  for (int slot = 0; slot < TICKER_PER_PAGE; slot++) {
+    int index = first + slot;
+    if (index >= tickerSymbolCount()) break; // short final page, if any
+    drawTickerEntry(tft, index, slot * colW + 8, textY);
   }
 
   tft.setTextDatum(MC_DATUM); // restore the datum the other screens expect
-  return totalWidth;
 }
