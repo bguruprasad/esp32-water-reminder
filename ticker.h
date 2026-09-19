@@ -16,7 +16,7 @@ void tickerPump();
 // Takes a UTC epoch (i.e. time(nullptr)) rather than a local struct tm,
 // and derives ET by offsetting it. Deliberately avoids mktime(), whose
 // tm_isdst handling differs between newlib on the device and glibc on a
-// host — that divergence made an earlier version report "open" outside
+// host - that divergence made an earlier version report "open" outside
 // market hours on hardware while passing every host test.
 //
 // The global timezone still belongs to the clock and must not be changed.

@@ -1,4 +1,4 @@
-# Water Reminder — Design Spec
+# Water Reminder - Design Spec
 
 Date: 2026-09-14
 Status: Approved
@@ -11,8 +11,8 @@ don't have to remember on their own.
 
 ## Requirements
 
-- Reminder fires every 30 minutes, only Monday–Friday, only 09:00–18:00,
-  local Dublin time (`Europe/Dublin`, with automatic DST handling — GMT in
+- Reminder fires every 30 minutes, only Monday - Friday, only 09:00-18:00,
+  local Dublin time (`Europe/Dublin`, with automatic DST handling - GMT in
   winter, IST/BST-equivalent Irish Summer Time in summer).
 - Reminder must be hard to miss: full-screen visual alert. Audible beep is
   deferred (see Non-goals) since no external speaker/buzzer is attached yet.
@@ -23,7 +23,7 @@ don't have to remember on their own.
 - No reminders fire outside the configured window (evenings, weekends,
   before 09:00, at/after 18:00).
 - Entering the window (e.g. device boots at 9:15) does not immediately fire
-  a reminder — the first reminder is the next scheduled mark.
+  a reminder - the first reminder is the next scheduled mark.
 - No WiFi credentials are ever committed to git. The project repo must be
   safe to push publicly.
 - The device needs real wall-clock time and correct weekday, since it has
@@ -33,12 +33,12 @@ don't have to remember on their own.
 
 - No persistent history/analytics of water intake across reboots (a same-day
   in-memory tally is fine as a stretch, not required).
-- No mobile app / remote control — this is a self-contained device.
+- No mobile app / remote control - this is a self-contained device.
 - No support for multiple simultaneous schedules or per-day customization.
 - No audible beep for now: the board's only proven audio path
   (Sketch_07_Play_MP3_SD_by_DAC) needs the ESP8266Audio library plus an SD
   card and an I2S DAC output; no external speaker/buzzer is attached to
-  the device yet. Revisit once speaker hardware is available — either the
+  the device yet. Revisit once speaker hardware is available - either the
   DAC/I2S path or a simple `ledc` PWM tone, decided then. Full-screen
   tap-to-dismiss is the sole alert channel for this build.
 
@@ -46,13 +46,13 @@ don't have to remember on their own.
 
 A share-price band occupies the previously-empty bottom strip of the idle
 screen. It is strictly decorative: it never blocks boot and never blocks
-the alert path. (It CAN briefly delay a reminder — see "Fetching" below.)
+the alert path. (It CAN briefly delay a reminder - see "Fetching" below.)
 
 - **Source**: Finnhub (`/api/v1/quote`), free tier, ~60 calls/min. One
   symbol per request.
 - **Symbols**: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, NFLX.
 - **Refresh**: one symbol fetched every 12s, so all eight refresh on a
-  96-second cycle — 5 calls/min against the ~60/min limit. The interval
+  96-second cycle - 5 calls/min against the ~60/min limit. The interval
   sets the request rate, not the symbol count, so adding symbols
   lengthens the refresh cycle rather than consuming more quota.
 - **Fetching**: synchronous, and it CAN stall the UI loop for up to ~5s
@@ -70,7 +70,7 @@ the alert path. (It CAN briefly delay a reminder — see "Fetching" below.)
   break the ticker. The accepted risk is that a man-in-the-middle could
   feed false prices to a decorative desk display on a home network.
 - **API key**: a third field on the existing WiFi setup portal, saved to
-  NVS beside the WiFi credentials. No secret ever enters git — the same
+  NVS beside the WiFi credentials. No secret ever enters git - the same
   rule the WiFi credentials follow. A missing or rejected key shows a
   quiet notice in the band rather than blocking anything.
 
@@ -81,7 +81,7 @@ the alert path. (It CAN briefly delay a reminder — see "Fetching" below.)
   from entering history, where deleting the file will not remove it.
   Rotate the key at Finnhub if it is ever exposed.
 - **Layout**: the band occupies y=178-240 and shows two symbols at a
-  time, each on two lines — the symbol centred above its price and
+  time, each on two lines - the symbol centred above its price and
   percent change, with the `$` in the same amber as the clock's AM/PM.
   Pages swap every 5 seconds, so all eight come round every 20 seconds.
   Fitting two lines required moving the idle stack up: `IDLE_CLOCK_Y`
@@ -106,7 +106,7 @@ Single Arduino sketch (`water-reminder.ino`), built from four concerns:
 ### 1. WiFi provisioning
 
 On boot, attempt to connect using credentials stored in NVS flash (via the
-`Preferences` library, part of the ESP32 core — no new dependency).
+`Preferences` library, part of the ESP32 core - no new dependency).
 
 If no credentials are stored, or the stored credentials fail to connect
 within a timeout, fall back to a self-hosted captive portal:
@@ -119,7 +119,7 @@ within a timeout, fall back to a self-hosted captive portal:
   which then connects normally.
 
 This uses only libraries already installed in this environment (`WiFi`,
-`DNSServer`, `Preferences`, all part of the esp32 Arduino core) — no
+`DNSServer`, `Preferences`, all part of the esp32 Arduino core) - no
 WiFiManager or other third-party dependency. No secrets file, no
 `.gitignore` entry needed: nothing sensitive ever exists as a file.
 
@@ -138,11 +138,11 @@ If WiFi later drops, the device keeps running off its internal clock
 
 Each loop tick, using the current local time:
 
-- Determine if now is Mon–Fri and within 09:00–18:00.
+- Determine if now is Mon - Fri and within 09:00-18:00.
 - If outside this window: no reminders; idle screen shows "Outside work
   hours" (or similar) and no countdown.
 - If inside this window: compute the next 30-minute mark (09:00, 09:30,
-  10:00, ..., 17:30 — 18:00 itself is window close, not a reminder time).
+  10:00, ..., 17:30-18:00 itself is window close, not a reminder time).
   When the current time reaches/passes that mark and a reminder hasn't
   already fired for it, trigger the alert.
 - On boot/window-entry, the "last fired" state is initialized to the most
@@ -155,18 +155,18 @@ Two screens, using `TFT_eSPI` (configured for FNK0114B) and `TFT_Touch`
 exactly as calibrated in the Freenove example sketches:
 
 - **Idle screen**: current time in 12-hour format with AM/PM, using
-  TFT_eSPI Font 6 (48px, bold, includes lowercase a/p/m natively — the
+  TFT_eSPI Font 6 (48px, bold, includes lowercase a/p/m natively - the
   library's built-in fonts are fixed sizes, not percentage-scalable; Font
   6 is the next size up from the original Font 4/26px clock, ~85% larger),
   a thin divider beneath it, day of week, and a status pill showing either
   "Next reminder: HH:MM" (inside window) or "Outside work hours" (outside
   window).
 - **Alert screen**: full-screen message ("Drink Water!" or similar) with
-  a continuously cycling background flash (red → amber → green, matching
+  a continuously cycling background flash (red -> amber -> green, matching
   the idle clock's ~2x text size for the headline), and a small drawn
-  glass-of-water icon above the text (built from basic filled shapes —
+  glass-of-water icon above the text (built from basic filled shapes  -
   TFT_eSPI has no emoji font, so this is a native shape-drawn icon, not a
-  Unicode glyph). No instructional subtext — the flash, icon, and headline
+  Unicode glyph). No instructional subtext - the flash, icon, and headline
   are the whole message. No audio (see Non-goals). Runs for up to 30
   seconds; tapping anywhere during that window dismisses immediately,
   otherwise it auto-dismisses at the 30s mark. Either path returns to the
@@ -206,12 +206,12 @@ normal loop (every tick):
   running the schedule against an unset/garbage clock, and keeps retrying
   sync in the background.
 - Touch read glitches (stray/ghost touches) are handled the same way the
-  Freenove touch example sketches already debounce — no additional
+  Freenove touch example sketches already debounce - no additional
   handling needed beyond what's proven in Sketch_12.
 
 ## Testing approach
 
-Embedded hardware target — no unit test framework. Verification is
+Embedded hardware target - no unit test framework. Verification is
 compile + flash + on-device behavior check, done incrementally per stage
 rather than building the whole thing blind:
 

@@ -8,20 +8,20 @@
 
 **Tech Stack:** Arduino on ESP32 (core 3.3.11, FQBN `esp32:esp32:esp32`), `HTTPClient` + `NetworkClientSecure` (in core), ArduinoJson 7.4.3, `Preferences` (NVS), `TFT_eSPI`.
 
-**Spec:** [docs/superpowers/specs/2026-09-14-water-reminder-design.md](../specs/2026-09-14-water-reminder-design.md) — see the "Addendum: share price ticker" section.
+**Spec:** [docs/superpowers/specs/2026-09-14-water-reminder-design.md](../specs/2026-09-14-water-reminder-design.md) - see the "Addendum: share price ticker" section.
 
 ## Global Constraints
 
 - Symbols, in display order: `AAPL`, `MSFT`, `GOOGL`, `AMZN`, `NVDA`.
-- One symbol fetched per 12 seconds, rotating — five symbols refresh each minute, 5 calls/min against Finnhub's ~60/min free limit.
+- One symbol fetched per 12 seconds, rotating - five symbols refresh each minute, 5 calls/min against Finnhub's ~60/min free limit.
 - Endpoint: `https://finnhub.io/api/v1/quote?symbol=<SYM>&token=<KEY>`.
 - TLS: `client.setInsecure()`. Do NOT bake in a CA root certificate.
 - The API key is entered on the device setup page and stored in NVS. It must NEVER appear in source, in a committed file, or in a log line. When printing diagnostics, print only whether a key is present, never its value.
-- Fetching is synchronous and CAN briefly stall the UI loop. This was reviewed and consciously accepted (see the amendment below) — it is not a defect to re-flag.
+- Fetching is synchronous and CAN briefly stall the UI loop. This was reviewed and consciously accepted (see the amendment below) - it is not a defect to re-flag.
 - Band occupies y=200-235. Nothing above it moves: `IDLE_CLOCK_Y`, `IDLE_DIVIDER_Y`, `IDLE_DAY_Y`, `IDLE_PILL_Y`, `IDLE_PILL_H` keep their current values.
-- The band repaints only its own strip (`fillRect` over y=200-235), never `fillScreen` — that discipline is what removed the screen flicker.
+- The band repaints only its own strip (`fillRect` over y=200-235), never `fillScreen` - that discipline is what removed the screen flicker.
 - Market hours: 09:30-16:00 US Eastern, Mon-Fri. Outside them the band is hidden AND fetching stops.
-- ET must be derived arithmetically inside `ticker.cpp`. Do NOT call `configTzTime()` or `setenv("TZ",...)` — one global timezone is already set to `Europe/Dublin` and the clock depends on it.
+- ET must be derived arithmetically inside `ticker.cpp`. Do NOT call `configTzTime()` or `setenv("TZ",...)` - one global timezone is already set to `Europe/Dublin` and the clock depends on it.
 - Board: FQBN `esp32:esp32:esp32`, port `/dev/cu.usbserial-120`, upload speed `115200`.
 - Commit messages end with: `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
 
@@ -32,19 +32,19 @@
 | `ticker.h` / `ticker.cpp` (new) | Symbol list, price state, non-blocking fetch rotation, JSON parsing, US market-hours test. No display code. |
 | `wifi_setup.cpp` (modify) | Third form field for the API key; save to NVS; expose a getter. |
 | `wifi_setup.h` (modify) | Declare the key getter. |
-| `ui.h` / `ui.cpp` (modify) | `uiDrawTickerBand()` — renders the band strip from ticker state. |
+| `ui.h` / `ui.cpp` (modify) | `uiDrawTickerBand()` - renders the band strip from ticker state. |
 | `water-reminder.ino` (modify) | Call the fetch pump and band repaint from `loop()`. |
 
 **Two integration hazards this plan must handle:**
 
 1. `uiDrawIdleScreen()` begins with `fillScreen(TFT_BLACK)`, and `loop()` calls it on every alert dismissal. That erases the band, so the band must be repainted after any full idle redraw (Task 6).
-2. `wifiSetupStartPortal()` never returns — it ends in `ESP.restart()` inside a `while(true)`. The API key must therefore be saved in that same block alongside SSID/password (Task 2); there is no post-portal code path.
+2. `wifiSetupStartPortal()` never returns - it ends in `ESP.restart()` inside a `while(true)`. The API key must therefore be saved in that same block alongside SSID/password (Task 2); there is no post-portal code path.
 
 ---
 
 ## Execution order
 
-Actual order run: **Task 2 → Task 1 → 3 → 4 → 5 → 6.** Task 2 went first
+Actual order run: **Task 2 -> Task 1 -> 3 -> 4 -> 5 -> 6.** Task 2 went first
 because Task 1 needed the API key to exist in NVS, and nothing wrote it
 there until Task 2 built the setup-portal field. Task 2 is COMPLETE and
 hardware-verified; the key is in NVS.
@@ -98,7 +98,7 @@ Consequences for the tasks below:
 
 ## Task 1: Confirm the Finnhub JSON contract (host-side, no firmware)
 
-The spec records that the success payload's field names are **unverified** — no API key existed at planning time, and nothing may be built on an assumed JSON contract.
+The spec records that the success payload's field names are **unverified** - no API key existed at planning time, and nothing may be built on an assumed JSON contract.
 
 **This task writes no code and touches no files.** It was originally an on-device probe read over the serial port; serial reading proved unreliable on this machine and was abandoned (see the "no serial logging" amendment). The response shape is a property of the Finnhub API, identical whichever machine fetches it, so a single host-side request settles it with no firmware, no flashing, and no serial.
 
@@ -116,9 +116,9 @@ The API key must NOT be pasted into the agent conversation, a file, or a command
 curl -s "https://finnhub.io/api/v1/quote?symbol=AAPL&token=YOUR_KEY_HERE"
 ```
 
-and reports back **only the JSON response**, never the command line — the response body carries no secret, the URL does.
+and reports back **only the JSON response**, never the command line - the response body carries no secret, the URL does.
 
-- [x] **Step 2: Record the mapping into Task 3** — DONE, contract confirmed
+- [x] **Step 2: Record the mapping into Task 3** - DONE, contract confirmed
 
 Observed response (AAPL, 2026-09-15):
 
@@ -131,16 +131,16 @@ Confirmed, and it matches the documented shape exactly:
 - `c` = current price. Present, a JSON **number**.
 - `dp` = percent change. Present, a JSON **number**, and already expressed
   as a percentage (`0.2438` means 0.24%), NOT a 0-1 fraction. So Task 4's
-  `"%.2f%%"` formatting is correct as written — do **not** multiply by 100.
+  `"%.2f%%"` formatting is correct as written - do **not** multiply by 100.
 - Both are unquoted numbers, so `doc["c"].is<float>()` in `parseQuote()`
   succeeds. (Had they been quoted strings, that check would have failed
   and every quote would have been silently discarded.)
 
-**Task 3's `parseQuote()` needs no changes — implement it as written.**
+**Task 3's `parseQuote()` needs no changes - implement it as written.**
 
 - [ ] **Step 3: No commit**
 
-Nothing to commit — this task produces a recorded finding, not a code change.
+Nothing to commit - this task produces a recorded finding, not a code change.
 
 ---
 
@@ -152,7 +152,7 @@ Nothing to commit — this task produces a recorded finding, not a code change.
 
 **Interfaces:**
 - Consumes: the existing portal in `wifi_setup.cpp`.
-- Produces: `String wifiSetupApiKey();` — returns the stored Finnhub key, or `""` if none. Tasks 3 and 5 call it.
+- Produces: `String wifiSetupApiKey();` - returns the stored Finnhub key, or `""` if none. Tasks 3 and 5 call it.
 
 - [ ] **Step 1: Declare the getter in `wifi_setup.h`**
 
@@ -160,7 +160,7 @@ Add before `#endif`:
 
 ```c
 // Returns the Finnhub API key saved via the setup portal, or "" if none
-// has been entered. The key lives only in NVS — never in source control.
+// has been entered. The key lives only in NVS - never in source control.
 String wifiSetupApiKey();
 ```
 
@@ -208,7 +208,7 @@ In `handleSave()`, after the `submittedPass` line:
 
 - [ ] **Step 5: Persist it**
 
-In `wifiSetupStartPortal()`'s save block — the one ending in `ESP.restart()`, since the function never returns — after the `putString(NVS_KEY_PASS, ...)` line:
+In `wifiSetupStartPortal()`'s save block - the one ending in `ESP.restart()`, since the function never returns - after the `putString(NVS_KEY_PASS, ...)` line:
 
 ```cpp
       prefs.putString(NVS_KEY_APIKEY, submittedApiKey);
@@ -237,7 +237,7 @@ Expected: compiles clean.
 
 Because the device already has saved WiFi credentials, the portal will NOT appear on boot. To reach it, temporarily clear NVS or connect while the router is off so the connect times out and the portal opens. Simplest: power the board with the router unreachable, or briefly add `prefs.clear()` before the read in `wifiSetupConnect()` and flash once.
 
-Verify with the user: the setup page shows three fields; entering a key saves it; after reboot the device reconnects normally. The key must NOT be printed to serial — check that no log line contains it.
+Verify with the user: the setup page shows three fields; entering a key saves it; after reboot the device reconnects normally. The key must NOT be printed to serial - check that no log line contains it.
 
 - [ ] **Step 9: Commit**
 
@@ -254,7 +254,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 3: Ticker module — state, fetching, market hours
+## Task 3: Ticker module - state, fetching, market hours
 
 **Files:**
 - Create: `ticker.h`
@@ -263,11 +263,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `wifiSetupApiKey()` (Task 2).
 - Produces:
-  - `void tickerBegin();` — call once in `setup()`.
-  - `void tickerPump();` — call every `loop()`; non-blocking, fetches at most one symbol per 12s and only during market hours.
-  - `bool tickerIsMarketOpen(const struct tm &nowLocalDublin);` — true during 09:30-16:00 ET, Mon-Fri.
+  - `void tickerBegin();` - call once in `setup()`.
+  - `void tickerPump();` - call every `loop()`; non-blocking, fetches at most one symbol per 12s and only during market hours.
+  - `bool tickerIsMarketOpen(const struct tm &nowLocalDublin);` - true during 09:30-16:00 ET, Mon-Fri.
   - `int tickerSymbolCount();`
-  - `bool tickerEntry(int index, String &symbolOut, float &priceOut, float &pctOut, bool &validOut);` — reads one symbol's latest state for rendering.
+  - `bool tickerEntry(int index, String &symbolOut, float &priceOut, float &pctOut, bool &validOut);` - reads one symbol's latest state for rendering.
   - `bool tickerHasApiKey();`
 
 - [ ] **Step 1: Write `ticker.h`**
@@ -287,7 +287,7 @@ void tickerBegin();
 void tickerPump();
 
 // True during US market hours: 09:30-16:00 US Eastern, Mon-Fri.
-// Takes the device's Dublin local time and converts arithmetically —
+// Takes the device's Dublin local time and converts arithmetically  -
 // the global timezone belongs to the clock and must not be changed.
 bool tickerIsMarketOpen(const struct tm &nowLocalDublin);
 
@@ -334,7 +334,7 @@ static String apiKey = "";
 
 void tickerBegin() {
   apiKey = wifiSetupApiKey();
-  // No logging — whether a key is present is visible on screen via the
+  // No logging - whether a key is present is visible on screen via the
   // band's "Ticker: no API key" state.
   lastFetchAtMs = millis() - TICKER_FETCH_INTERVAL_MS; // allow an immediate first fetch
 }
@@ -364,7 +364,7 @@ bool tickerEntry(int index, String &symbolOut, float &priceOut,
 // VERIFIED against 14 boundary cases on the host before this plan was
 // finalised, including both 2026 and 2027 transitions: 2026-03-07/08/09,
 // 2026-03-01, 2026-10-31, 2026-11-01, 2027-03-13/14, 2027-11-06/07, plus
-// mid-season months. All correct — use as written, no need to re-derive.
+// mid-season months. All correct - use as written, no need to re-derive.
 //
 // Derivation: for any date, the day-of-month of the most recent Sunday
 // is tm_mday - tm_wday. The first Sunday of the month is therefore
@@ -412,7 +412,7 @@ static bool parseQuote(const String &body, float &priceOut, float &pctOut) {
   return true;
 }
 
-// No serial logging here — see the "no serial logging" amendment. A
+// No serial logging here - see the "no serial logging" amendment. A
 // failed fetch simply leaves the symbol's previous value in place
 // (quotes[index].valid stays as it was), which the band renders as the
 // last good price, or as "--" if there has never been one.
@@ -498,7 +498,7 @@ Add before `#endif`:
 // the whole screen, so it does not reintroduce flicker.
 void uiDrawTickerBand(TFT_eSPI &tft, int scrollOffsetPx);
 
-// Blanks the band's strip — used when the market is shut.
+// Blanks the band's strip - used when the market is shut.
 void uiClearTickerBand(TFT_eSPI &tft);
 ```
 
@@ -514,7 +514,7 @@ void uiClearTickerBand(TFT_eSPI &tft) {
   tft.fillRect(0, TICKER_BAND_TOP, TFT_HRES, TICKER_BAND_H, TFT_BLACK);
 }
 
-// Draws a small up/down triangle — shape-drawn, since there is no emoji
+// Draws a small up/down triangle - shape-drawn, since there is no emoji
 // font (the same reason the alert screen's glass is drawn by hand).
 static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t color) {
   const int halfW = 4, halfH = 4;
@@ -732,10 +732,10 @@ The bottom of the idle screen shows a scrolling share-price band
 It needs a free Finnhub API key from https://finnhub.io/register. Enter
 it in the third field of the device's setup page, alongside your WiFi
 details. The key is stored on the device and never appears in this
-repository — leave the field blank to run without the ticker.
+repository - leave the field blank to run without the ticker.
 
 Prices refresh one symbol every 12 seconds, so all five update each
-minute — comfortably inside Finnhub's free rate limit.
+minute - comfortably inside Finnhub's free rate limit.
 ```
 
 - [ ] **Step 2: Commit**

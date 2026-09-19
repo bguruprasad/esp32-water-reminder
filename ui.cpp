@@ -4,7 +4,7 @@
 #include <string.h> // strcmp, for diffing what's already on screen
 // FreeSansBold24pt7b is already pulled in transitively via TFT_eSPI.h ->
 // gfxfont.h (which includes all 48 GFXFF fonts when LOAD_GFXFF is
-// enabled) — including it again here would redefine its symbols, since
+// enabled) - including it again here would redefine its symbols, since
 // the font header has no include guard of its own.
 
 static const char *WEEKDAY_NAMES[7] = {
@@ -24,7 +24,7 @@ static int to12Hour(int hour24, bool *isAm) {
 // Shifted up 12px from TFT_VRES/2 - 34 to free vertical space for the
 // two-line ticker band below. Everything under it derives from this
 // constant, so the spacing tuned by hand (divider length, weekday gap,
-// the pill's 2px nudge) is preserved — the whole block just sits higher.
+// the pill's 2px nudge) is preserved - the whole block just sits higher.
 static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 52;          // vertical middle of the big digits
 static const int IDLE_DIVIDER_Y = IDLE_CLOCK_Y + 34;
 // Weekday sits 2px higher than it used to, which opens up both the gap
@@ -33,7 +33,7 @@ static const int IDLE_DAY_Y     = IDLE_DIVIDER_Y + 18;
 static const int IDLE_PILL_Y    = IDLE_DAY_Y + 32;
 static const int IDLE_PILL_H    = 26;
 static const int IDLE_AMPM_GAP  = 6;
-// FreeSansBold9pt7b yAdvance — used for the weekday and the pill label.
+// FreeSansBold9pt7b yAdvance - used for the weekday and the pill label.
 static const int IDLE_SMALL_FONT_H = 22;
 
 // What was last painted, so uiUpdateIdleScreen() can repaint only what
@@ -70,7 +70,7 @@ static void paintClockRow(TFT_eSPI &tft, const char *digitsBuf, const char *ampm
   // AM/PM sits flush with the bottom of the digits.
   //
   // L_BASELINE, not BL_DATUM: for a free font drawString() first does
-  // poY += glyph_ab, then BL_DATUM subtracts (glyph_ab + glyph_bb) —
+  // poY += glyph_ab, then BL_DATUM subtracts (glyph_ab + glyph_bb)  -
   // netting poY - glyph_bb, i.e. it anchors the DESCENDER bottom, not
   // the baseline. The 24pt digits have a deeper descender than the 12pt
   // label, so sharing a BL_DATUM line pushed the label's baseline lower
@@ -194,7 +194,7 @@ void uiUpdateIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &
 
 // Draws a small glass-of-water icon (outline + water fill) centered at
 // (cx, cy), sized to fit within a roughly iconWidth x (iconWidth*1.17)
-// box — matches the tapered-glass shape used in the design mockup.
+// box - matches the tapered-glass shape used in the design mockup.
 // TFT_eSPI has no emoji font, so this is a native shape-drawn icon.
 static void drawGlassIcon(TFT_eSPI &tft, int cx, int cy, int iconWidth) {
   int halfTop = iconWidth / 2;
@@ -246,10 +246,10 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color) {
   tft.setFreeFont(NULL); // restore default GLCD/bitmap font for other screens
 }
 
-// Two-line band. The idle stack above now ends at y≈171 (pill bottom),
+// Two-line band. The idle stack above now ends at y~171 (pill bottom),
 // so the band starts at 178 and runs to the bottom edge: 62px, enough
 // for two 22px lines of FreeSansBold9pt7b plus padding. A single 35px
-// line could not fit "GOOGL $333.08 ▲0.24%" across a half-width column
+// line could not fit "GOOGL $333.08 ^0.24%" across a half-width column
 // at bold weight, which is what caused the columns to overlap.
 static const int TICKER_BAND_TOP = 178;
 static const int TICKER_BAND_H   = 62;
@@ -258,7 +258,7 @@ void uiClearTickerBand(TFT_eSPI &tft) {
   tft.fillRect(0, TICKER_BAND_TOP, TFT_HRES, TICKER_BAND_H, TFT_BLACK);
 }
 
-// Draws a small up/down triangle — shape-drawn, since there is no emoji
+// Draws a small up/down triangle - shape-drawn, since there is no emoji
 // font (the same reason the alert screen's glass is drawn by hand).
 static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t color) {
   const int halfW = 4, halfH = 4;

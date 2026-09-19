@@ -28,8 +28,8 @@ No WiFi credentials are ever stored in this repository.
 
 The bottom of the idle screen shows a share-price band covering AAPL,
 MSFT, GOOGL, AMZN, NVDA, META, TSLA and NFLX. Two symbols are shown at a
-time in bold — each on two lines, the ticker symbol above its price and
-percent change — swapping to the next pair every 5 seconds, so the full
+time in bold - each on two lines, the ticker symbol above its price and
+percent change - swapping to the next pair every 5 seconds, so the full
 set comes round every 20 seconds. The band is hidden outside US market
 hours (09:30-16:00 ET, Mon-Fri).
 
@@ -41,7 +41,7 @@ the band reads "Ticker: no API key" during market hours.
 
 Prices refresh one symbol every 12 seconds in rotation, so each of the
 eight is updated about every 96 seconds. That is 5 requests a minute,
-comfortably inside Finnhub's free rate limit — the interval sets the
+comfortably inside Finnhub's free rate limit - the interval sets the
 request rate, so adding symbols lengthens the refresh cycle rather than
 using more of the quota.
 
@@ -65,6 +65,6 @@ end-to-end testing. Keep this commented out for normal use.
 
 ## Non-goals / not yet built
 
-- No audible beep — no speaker/buzzer hardware attached yet.
+- No audible beep - no speaker/buzzer hardware attached yet.
 - No persistent history of dismissed reminders.
 - No remote control or mobile app.

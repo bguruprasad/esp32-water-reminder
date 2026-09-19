@@ -27,7 +27,7 @@ static String apiKey = "";
 
 void tickerBegin() {
   apiKey = wifiSetupApiKey();
-  // No logging — whether a key is present is visible on screen via the
+  // No logging - whether a key is present is visible on screen via the
   // band's "Ticker: no API key" state.
   lastFetchAtMs = millis() - TICKER_FETCH_INTERVAL_MS; // allow an immediate first fetch
 }
@@ -57,7 +57,7 @@ bool tickerEntry(int index, String &symbolOut, float &priceOut,
 // VERIFIED against 14 boundary cases on the host before this plan was
 // finalised, including both 2026 and 2027 transitions: 2026-03-07/08/09,
 // 2026-03-01, 2026-10-31, 2026-11-01, 2027-03-13/14, 2027-11-06/07, plus
-// mid-season months. All correct — use as written, no need to re-derive.
+// mid-season months. All correct - use as written, no need to re-derive.
 //
 // Derivation: for any date, the day-of-month of the most recent Sunday
 // is tm_mday - tm_wday. The first Sunday of the month is therefore
@@ -114,7 +114,7 @@ static bool parseQuote(const String &body, float &priceOut, float &pctOut) {
   return true;
 }
 
-// No serial logging here — see the "no serial logging" amendment. A
+// No serial logging here - see the "no serial logging" amendment. A
 // failed fetch simply leaves the symbol's previous value in place
 // (quotes[index].valid stays as it was), which the band renders as the
 // last good price, or as "--" if there has never been one.

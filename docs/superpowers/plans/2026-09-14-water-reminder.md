@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build an ESP32 + Freenove 2.8" touch TFT device that shows a full-screen "drink water" reminder every 30 minutes, Mon–Fri, 09:00–18:00 Dublin time, dismissed by tapping the screen.
+**Goal:** Build an ESP32 + Freenove 2.8" touch TFT device that shows a full-screen "drink water" reminder every 30 minutes, Mon - Fri, 09:00-18:00 Dublin time, dismissed by tapping the screen.
 
-**Architecture:** Single Arduino sketch directory (`water-reminder/water-reminder.ino`) split into small header+source pairs by responsibility: WiFi captive-portal provisioning, NTP time sync, a pure schedule-engine (no hardware deps, easiest to reason about in isolation), and UI (idle/alert screens + touch). `setup()`/`loop()` in the main `.ino` just wires these together. No unit-test framework — each task ends in a compile + flash + on-device behavior check, per the spec's testing approach.
+**Architecture:** Single Arduino sketch directory (`water-reminder/water-reminder.ino`) split into small header+source pairs by responsibility: WiFi captive-portal provisioning, NTP time sync, a pure schedule-engine (no hardware deps, easiest to reason about in isolation), and UI (idle/alert screens + touch). `setup()`/`loop()` in the main `.ino` just wires these together. No unit-test framework - each task ends in a compile + flash + on-device behavior check, per the spec's testing approach.
 
 **Tech Stack:** Arduino framework on ESP32 (esp32:esp32 core 3.3.11, via arduino-cli, FQBN `esp32:esp32:esp32`), `TFT_eSPI` (configured for FNK0114B_2P8_240x320_ST7789), `TFT_Touch`, and ESP32-core built-ins `WiFi`, `DNSServer`, `WebServer`, `Preferences`, `time.h`. No new library installs.
 
@@ -12,12 +12,12 @@
 
 ## Global Constraints
 
-- Schedule window: Monday–Friday, 09:00–18:00 local time, reminder every 30 minutes on the half-hour (09:00, 09:30, ..., 17:30 — never 18:00 itself).
+- Schedule window: Monday - Friday, 09:00-18:00 local time, reminder every 30 minutes on the half-hour (09:00, 09:30, ..., 17:30 - never 18:00 itself).
 - Timezone: `Europe/Dublin`, POSIX TZ string `GMT0IST,M3.5.0/1,M10.5.0` (auto DST).
-- No WiFi credentials ever committed to git — provisioning is via on-device captive portal only (SSID `WaterReminder-Setup`), credentials persisted in NVS via `Preferences`.
+- No WiFi credentials ever committed to git - provisioning is via on-device captive portal only (SSID `WaterReminder-Setup`), credentials persisted in NVS via `Preferences`.
 - No new library dependencies beyond what's already installed: `TFT_eSPI`, `TFT_Touch`, and the ESP32 Arduino core (`WiFi`, `DNSServer`, `WebServer`, `Preferences`, `time.h`).
-- No audio/beep in this build — full-screen tap-to-dismiss is the only alert channel (deferred per spec Non-goals: no speaker hardware yet).
-- Board: FQBN `esp32:esp32:esp32`, upload port `/dev/cu.usbserial-120`, upload speed `115200` (921600 was unreliable on this device — see prior session).
+- No audio/beep in this build - full-screen tap-to-dismiss is the only alert channel (deferred per spec Non-goals: no speaker hardware yet).
+- Board: FQBN `esp32:esp32:esp32`, upload port `/dev/cu.usbserial-120`, upload speed `115200` (921600 was unreliable on this device - see prior session).
 - Display driver selection already done at the library level: `TFT_eSPI/User_Setup_Select.h` has `FNK0114B_2P8_240x320_ST7789` active. Do not change this.
 - Touch pins (from Freenove reference sketches): `DOUT=39, DIN=32, DCS=33, DCLK=25`. Screen resolution landscape: `HRES=320, VRES=240`, `tft.setRotation(1)`, `touch.setRotation(1)`.
 
@@ -120,8 +120,8 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: nothing from other tasks (self-contained; only needs `Serial` for logging).
 - Produces:
-  - `bool wifiSetupConnect(unsigned long connectTimeoutMs = 15000);` — tries stored NVS credentials, returns `true` if connected (STA mode, `WiFi.status() == WL_CONNECTED`) within the timeout, `false` otherwise (does NOT itself start the portal).
-  - `void wifiSetupStartPortal();` — starts AP mode (`WaterReminder-Setup`), DNS redirect, and a blocking loop that serves the credential form via `WebServer` until the user submits, then saves to NVS and calls `ESP.restart()`. Never returns normally.
+  - `bool wifiSetupConnect(unsigned long connectTimeoutMs = 15000);` - tries stored NVS credentials, returns `true` if connected (STA mode, `WiFi.status() == WL_CONNECTED`) within the timeout, `false` otherwise (does NOT itself start the portal).
+  - `void wifiSetupStartPortal();` - starts AP mode (`WaterReminder-Setup`), DNS redirect, and a blocking loop that serves the credential form via `WebServer` until the user submits, then saves to NVS and calls `ESP.restart()`. Never returns normally.
   - Later tasks call `wifiSetupConnect()` once in `setup()`; if it returns `false`, call `wifiSetupStartPortal()`.
 
 - [ ] **Step 1: Write `wifi_setup.h`**
@@ -139,7 +139,7 @@ bool wifiSetupConnect(unsigned long connectTimeoutMs = 15000);
 
 // Starts a "WaterReminder-Setup" access point + captive portal, serves a
 // credential form, saves submitted credentials to NVS, then reboots.
-// Blocks forever (never returns) — call only when wifiSetupConnect()
+// Blocks forever (never returns) - call only when wifiSetupConnect()
 // returned false.
 void wifiSetupStartPortal();
 
@@ -315,7 +315,7 @@ Run: `arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 --boa
 On-device check (needs the user, since it requires joining a WiFi network from a phone/laptop):
 1. Screen should show "Join 'WaterReminder-Setup' WiFi to configure".
 2. From a phone/laptop, join the `WaterReminder-Setup` network.
-3. Navigate to `http://192.168.4.1/` (or wait for captive-portal auto-redirect) — the setup form should appear.
+3. Navigate to `http://192.168.4.1/` (or wait for captive-portal auto-redirect) - the setup form should appear.
 4. Submit real home WiFi SSID/password.
 5. Device should show "Saved. Rebooting..." then reboot and show "WiFi connected!" on the TFT.
 
@@ -347,8 +347,8 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: nothing new from other tasks; uses `TFT_eSPI &tft` passed by reference.
 - Produces:
-  - `time_sync.h`: `bool timeSyncStart();` — calls `configTzTime()` with the Dublin TZ string and blocks briefly waiting for first sync (returns `true` if `time(nullptr)` looks sane — i.e. year > 2020 — within a timeout, `false` otherwise). `bool timeSyncIsValid();` — cheap check of current sync state, used later to show "Time not synced" per spec error handling.
-  - `ui.h`: `void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);` — renders time (HH:MM:SS), weekday name, and a caller-supplied status line (used for "Time not synced" now, "Next reminder: HH:MM" / "Outside work hours" in Task 4). Later tasks reuse this signature unchanged.
+  - `time_sync.h`: `bool timeSyncStart();` - calls `configTzTime()` with the Dublin TZ string and blocks briefly waiting for first sync (returns `true` if `time(nullptr)` looks sane - i.e. year > 2020 - within a timeout, `false` otherwise). `bool timeSyncIsValid();` - cheap check of current sync state, used later to show "Time not synced" per spec error handling.
+  - `ui.h`: `void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);` - renders time (HH:MM:SS), weekday name, and a caller-supplied status line (used for "Time not synced" now, "Next reminder: HH:MM" / "Outside work hours" in Task 4). Later tasks reuse this signature unchanged.
 
 - [ ] **Step 1: Add TZ string constant to `config.h`**
 
@@ -415,7 +415,7 @@ bool timeSyncStart() {
 
 // Renders the idle screen: current local time, weekday, and a status
 // line (e.g. "Next reminder: 10:30", "Outside work hours",
-// "Time not synced"). Clears and redraws the whole screen each call —
+// "Time not synced"). Clears and redraws the whole screen each call  -
 // callers should only call this when something has actually changed
 // (e.g. once per second), not every loop() tick.
 void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine);
@@ -452,7 +452,7 @@ void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &st
 }
 ```
 
-- [ ] **Step 6: Wire into `water-reminder.ino`** — after WiFi connects, start time sync, then loop redrawing the idle screen once per second
+- [ ] **Step 6: Wire into `water-reminder.ino`** - after WiFi connects, start time sync, then loop redrawing the idle screen once per second
 
 ```cpp
 #include "config.h"
@@ -536,11 +536,11 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Modify: `config.h`
 
 **Interfaces:**
-- Consumes: `struct tm` (standard C time struct) as input; no hardware/library deps beyond `<time.h>` — this file is intentionally hardware-free so its logic is easy to read and change in isolation.
+- Consumes: `struct tm` (standard C time struct) as input; no hardware/library deps beyond `<time.h>` - this file is intentionally hardware-free so its logic is easy to read and change in isolation.
 - Produces:
-  - `struct tm scheduleNextMark(const struct tm &nowLocal);` — returns the next scheduled reminder time (as a `struct tm`, same day) given the current local time. Behavior depends on `DEBUG_FAST_SCHEDULE`: normal mode uses 30-minute marks within Mon–Fri 09:00–18:00; debug mode uses 30-second marks with no day/hour restriction (per spec's debug mode).
-  - `bool scheduleIsWithinWindow(const struct tm &nowLocal);` — true if `nowLocal` falls inside the active schedule window (Mon–Fri 09:00–18:00 normally; always true in debug mode).
-  - `bool scheduleIsMarkDue(const struct tm &nowLocal, const struct tm &lastFiredMark);` — true if `nowLocal` has reached/passed the next mark after `lastFiredMark` and is still within the window. Task 5 calls this each loop tick and, when true, triggers the alert and updates its own `lastFiredMark` state to the mark that just fired.
+  - `struct tm scheduleNextMark(const struct tm &nowLocal);` - returns the next scheduled reminder time (as a `struct tm`, same day) given the current local time. Behavior depends on `DEBUG_FAST_SCHEDULE`: normal mode uses 30-minute marks within Mon - Fri 09:00-18:00; debug mode uses 30-second marks with no day/hour restriction (per spec's debug mode).
+  - `bool scheduleIsWithinWindow(const struct tm &nowLocal);` - true if `nowLocal` falls inside the active schedule window (Mon - Fri 09:00-18:00 normally; always true in debug mode).
+  - `bool scheduleIsMarkDue(const struct tm &nowLocal, const struct tm &lastFiredMark);` - true if `nowLocal` has reached/passed the next mark after `lastFiredMark` and is still within the window. Task 5 calls this each loop tick and, when true, triggers the alert and updates its own `lastFiredMark` state to the mark that just fired.
 
 - [ ] **Step 1: Write `schedule.h`**
 
@@ -618,7 +618,7 @@ bool scheduleIsMarkDue(const struct tm &nowLocal, const struct tm &lastFiredMark
 }
 ```
 
-- [ ] **Step 3: Compile (schedule.cpp has no dependents wired yet — verify it at least compiles standalone as part of the sketch)**
+- [ ] **Step 3: Compile (schedule.cpp has no dependents wired yet - verify it at least compiles standalone as part of the sketch)**
 
 Add a temporary throwaway line at the end of `setup()` in `water-reminder.ino` to force the compiler to touch the new files:
 
@@ -661,7 +661,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `scheduleIsMarkDue`, `scheduleNextMark`, `scheduleIsWithinWindow` from Task 4; `TFT_Touch &touch` for dismiss detection.
-- Produces: `ui.h` gains `void uiDrawAlertScreen(TFT_eSPI &tft);` — full-screen "Drink Water!" message, no touch handling inside (caller polls `touch.Pressed()` itself, matching the pattern already proven in the Freenove touch example sketches).
+- Produces: `ui.h` gains `void uiDrawAlertScreen(TFT_eSPI &tft);` - full-screen "Drink Water!" message, no touch handling inside (caller polls `touch.Pressed()` itself, matching the pattern already proven in the Freenove touch example sketches).
 
 - [ ] **Step 1: Add `uiDrawAlertScreen` to `ui.h`**
 
@@ -821,7 +821,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Create: `README.md`
 
 **Interfaces:**
-- None — documentation only.
+- None - documentation only.
 
 - [ ] **Step 1: Write `README.md`**
 
@@ -872,7 +872,7 @@ end-to-end testing. Keep this commented out for normal use.
 
 ## Non-goals / not yet built
 
-- No audible beep — no speaker/buzzer hardware attached yet.
+- No audible beep - no speaker/buzzer hardware attached yet.
 - No persistent history of dismissed reminders.
 - No remote control or mobile app.
 ```

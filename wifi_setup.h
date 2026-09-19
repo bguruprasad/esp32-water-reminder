@@ -10,12 +10,12 @@ bool wifiSetupConnect(unsigned long connectTimeoutMs = 15000);
 
 // Starts a "WaterReminder-Setup" access point + captive portal, serves a
 // credential form, saves submitted credentials to NVS, then reboots.
-// Blocks forever (never returns) — call only when wifiSetupConnect()
+// Blocks forever (never returns) - call only when wifiSetupConnect()
 // returned false.
 void wifiSetupStartPortal();
 
 // Returns the Finnhub API key saved via the setup portal, or "" if none
-// has been entered. The key lives only in NVS — never in source control.
+// has been entered. The key lives only in NVS - never in source control.
 String wifiSetupApiKey();
 
 #endif

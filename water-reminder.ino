@@ -31,7 +31,7 @@ static AlertFlashColor alertColor = ALERT_RED;
 //
 // This replaced a scrolling marquee, which had to clear and repaint the
 // whole strip ~25 times a second and visibly flickered. Here the strip
-// is repainted only when the page actually changes — once per 5s — which
+// is repainted only when the page actually changes - once per 5s - which
 // is the same repaint-on-change discipline that fixed the clock flicker.
 static const unsigned long TICKER_PAGE_MS = 5000;
 static unsigned long lastTickerPageMs = 0;
@@ -126,7 +126,7 @@ void loop() {
       tickerBandVisible = true;
     } else if (millis() - lastTickerPageMs >= TICKER_PAGE_MS) {
       // Dwell elapsed: advance to the next pair. This is the ONLY place
-      // the strip is repainted during steady state — once per 5s, not
+      // the strip is repainted during steady state - once per 5s, not
       // ~25 times a second as the old scrolling band did.
       lastTickerPageMs = millis();
       int pages = uiTickerPageCount();
@@ -159,7 +159,7 @@ void loop() {
       // Stepping by one interval only worked if no mark had been missed.
       // If the device sat idle across several marks (asleep, off, or just
       // outside the window), lastFiredMark was hours stale, so advancing
-      // it by 30 minutes left it STILL in the past — scheduleIsMarkDue()
+      // it by 30 minutes left it STILL in the past - scheduleIsMarkDue()
       // fired again on the very next loop pass, and the alert reappeared
       // the instant it was dismissed, once per missed half-hour.
       //
