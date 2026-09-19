@@ -7,10 +7,6 @@
 // enabled) - including it again here would redefine its symbols, since
 // the font header has no include guard of its own.
 
-static const char *WEEKDAY_NAMES[7] = {
-  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-};
-
 // Converts 24-hour tm_hour to a 12-hour display hour (1-12) and returns
 // whether it's AM. Noon and midnight both map to 12, per convention.
 static int to12Hour(int hour24, bool *isAm) {
@@ -19,21 +15,16 @@ static int to12Hour(int hour24, bool *isAm) {
   return hour12 == 0 ? 12 : hour12;
 }
 
-// Fixed vertical layout of the idle screen. Kept as named constants so
-// the full paint and the partial update agree on where things live.
-// Shifted up 12px from TFT_VRES/2 - 34 to free vertical space for the
-// two-line ticker band below. Everything under it derives from this
-// constant, so the spacing tuned by hand (divider length, weekday gap,
-// the pill's 2px nudge) is preserved - the whole block just sits higher.
-static const int IDLE_CLOCK_Y   = TFT_VRES / 2 - 52;          // vertical middle of the big digits
-static const int IDLE_DIVIDER_Y = IDLE_CLOCK_Y + 34;
-// Weekday sits 2px higher than it used to, which opens up both the gap
-// above it (divider -> weekday) and the one below (weekday -> pill).
-static const int IDLE_DAY_Y     = IDLE_DIVIDER_Y + 18;
-static const int IDLE_PILL_Y    = IDLE_DAY_Y + 32;
-static const int IDLE_PILL_H    = 26;
+// Portrait layout. The clock sits near the top; the lower two thirds
+// belong to the two chart panels. Everything below the clock derives
+// from IDLE_CLOCK_Y, so nudging that one constant moves the block.
+//
+// These are arithmetic against a 320px-tall screen, not observed values.
+// The landscape constants they replace took several rounds on hardware
+// to settle, so expect these to need the same.
+static const int IDLE_CLOCK_Y   = 34;   // vertical middle of the big digits
 static const int IDLE_AMPM_GAP  = 6;
-// FreeSansBold9pt7b yAdvance - used for the weekday and the pill label.
+// FreeSansBold9pt7b yAdvance.
 static const int IDLE_SMALL_FONT_H = 22;
 
 // What was last painted, so uiUpdateIdleScreen() can repaint only what
@@ -42,13 +33,6 @@ static const int IDLE_SMALL_FONT_H = 22;
 static bool idleScreenPainted = false;
 static char lastDigits[6] = "";
 static char lastAmpm[3] = "";
-static char lastWeekday[10] = "";
-static char lastStatus[32] = "";
-
-static const char *weekdayName(const struct tm &nowLocal) {
-  return (nowLocal.tm_wday >= 0 && nowLocal.tm_wday < 7)
-           ? WEEKDAY_NAMES[nowLocal.tm_wday] : "?";
-}
 
 static void formatClock(const struct tm &nowLocal, char *digitsOut, size_t digitsLen,
                         const char **ampmOut) {
@@ -107,59 +91,18 @@ static void paintClockRow(TFT_eSPI &tft, const char *digitsBuf, const char *ampm
   tft.setTextDatum(MC_DATUM);
 }
 
-static void paintWeekday(TFT_eSPI &tft, const char *weekday) {
-  const int h = IDLE_SMALL_FONT_H;
-  tft.fillRect(0, IDLE_DAY_Y - h / 2 - 2, TFT_HRES, h + 4, TFT_BLACK);
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
-  tft.drawString(weekday, TFT_HRES / 2, IDLE_DAY_Y);
-  tft.setFreeFont(NULL);
-}
-
-// Status pill: a rounded rect sized to the text, with the status string
-// centred inside it. The pill's width tracks the text, so the whole band
-// is cleared first rather than just the pill's own footprint.
-static void paintStatusPill(TFT_eSPI &tft, const char *statusLine) {
-  tft.fillRect(0, IDLE_PILL_Y - IDLE_PILL_H / 2 - 2, TFT_HRES, IDLE_PILL_H + 4, TFT_BLACK);
-
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  int pillWidth = tft.textWidth(statusLine) + 24;
-  int pillX = TFT_HRES / 2 - pillWidth / 2;
-  tft.fillRoundRect(pillX, IDLE_PILL_Y - IDLE_PILL_H / 2, pillWidth, IDLE_PILL_H,
-                    IDLE_PILL_H / 2, TFT_NAVY);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_CYAN, TFT_NAVY);
-  // Nudged up 2px: MC_DATUM centres on the font's full cell (ascent plus
-  // descender), but this label has no descenders, so centring on the cell
-  // leaves its visual mass sitting low in the pill.
-  tft.drawString(statusLine, TFT_HRES / 2, IDLE_PILL_Y - 2);
-  tft.setFreeFont(NULL);
-}
-
 void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine) {
+  (void)statusLine; // no status pill in portrait; kept for call-site compatibility
   tft.fillScreen(TFT_BLACK);
 
   char digitsBuf[6]; // "12:59" + nul
   const char *ampmStr;
   formatClock(nowLocal, digitsBuf, sizeof(digitsBuf), &ampmStr);
-  const char *weekday = weekdayName(nowLocal);
 
   paintClockRow(tft, digitsBuf, ampmStr);
 
-  // Divider line beneath the clock. Static, so only the full paint draws it.
-  // 7/25 of the width per side (~179px total), 40% longer than the 1/5 it was.
-  int dividerHalfWidth = (TFT_HRES * 7) / 25;
-  tft.drawFastHLine(TFT_HRES / 2 - dividerHalfWidth, IDLE_DIVIDER_Y,
-                    dividerHalfWidth * 2, TFT_DARKGREY);
-
-  paintWeekday(tft, weekday);
-  paintStatusPill(tft, statusLine.c_str());
-
   snprintf(lastDigits, sizeof(lastDigits), "%s", digitsBuf);
   snprintf(lastAmpm, sizeof(lastAmpm), "%s", ampmStr);
-  snprintf(lastWeekday, sizeof(lastWeekday), "%s", weekday);
-  snprintf(lastStatus, sizeof(lastStatus), "%s", statusLine.c_str());
   idleScreenPainted = true;
 }
 
@@ -172,23 +115,11 @@ void uiUpdateIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &
   char digitsBuf[6];
   const char *ampmStr;
   formatClock(nowLocal, digitsBuf, sizeof(digitsBuf), &ampmStr);
-  const char *weekday = weekdayName(nowLocal);
-  const char *status = statusLine.c_str();
 
   if (strcmp(digitsBuf, lastDigits) != 0 || strcmp(ampmStr, lastAmpm) != 0) {
     paintClockRow(tft, digitsBuf, ampmStr);
     snprintf(lastDigits, sizeof(lastDigits), "%s", digitsBuf);
     snprintf(lastAmpm, sizeof(lastAmpm), "%s", ampmStr);
-  }
-
-  if (strcmp(weekday, lastWeekday) != 0) {
-    paintWeekday(tft, weekday);
-    snprintf(lastWeekday, sizeof(lastWeekday), "%s", weekday);
-  }
-
-  if (strcmp(status, lastStatus) != 0) {
-    paintStatusPill(tft, status);
-    snprintf(lastStatus, sizeof(lastStatus), "%s", status);
   }
 }
 
