@@ -5,8 +5,9 @@ ST7789). It shows a full-screen reminder to drink water every 30 minutes,
 Monday-Friday, 09:00-18:00 (Europe/Dublin time, DST-aware) - tap the
 screen to dismiss, or leave it and it clears itself after 30 seconds.
 
-The rest of the time the bottom of the screen carries a live price band
-for eight US tech stocks, hidden outside US market hours.
+The screen stands upright in portrait, with the clock at the top and the
+lower two thirds carrying price charts for eight US tech stocks, two at
+a time.
 
 WiFi credentials and the price API key are entered on the device itself,
 through a setup page it serves over its own access point. Nothing secret
@@ -32,26 +33,37 @@ for the full design.
 
 No WiFi credentials are ever stored in this repository.
 
-## Price ticker
+## Price charts
 
-The bottom of the idle screen shows a share-price band covering AAPL,
-MSFT, GOOGL, AMZN, NVDA, META, TSLA and NFLX. Two symbols are shown at a
-time in bold - each on two lines, the ticker symbol above its price and
-percent change - swapping to the next pair every 5 seconds, so the full
-set comes round every 20 seconds. The band is hidden outside US market
-hours (09:30-16:00 ET, Mon-Fri).
+The lower two thirds of the screen show two stocks at a time from AAPL,
+MSFT, GOOGL, AMZN, NVDA, META, TSLA and NFLX, advancing every 5 seconds
+so the full set comes round every 20. Each panel carries the symbol and
+percent change on one line, the price below it, and a line chart of the
+day's trading with a dashed line at the previous close, so points above
+that line are up on the day.
 
-It needs a free Finnhub API key from https://finnhub.io/register. Enter
-it in the third field of the device's setup page, alongside your WiFi
-details. The key is stored on the device and never appears in this
-repository. The field is optional: left blank, no prices are fetched and
-the band reads "Ticker: no API key" during market hours.
+The charts are shown at all hours. Yahoo keeps serving the most recent
+session, so there is always something to look at; only the price fetching
+pauses when the US market is shut (09:30-16:00 ET, Mon-Fri).
 
-Prices refresh one symbol every 12 seconds in rotation, so each of the
-eight is updated about every 96 seconds. That is 5 requests a minute,
-comfortably inside Finnhub's free rate limit - the interval sets the
-request rate, so adding symbols lengthens the refresh cycle rather than
-using more of the quota.
+Two data sources, deliberately separate:
+
+- **Prices** come from Finnhub and need a free API key from
+  https://finnhub.io/register. Enter it in the third field of the
+  device's setup page, alongside your WiFi details. The key is stored on
+  the device and never appears in this repository. The field is optional:
+  left blank, no prices are fetched. One symbol is refreshed every 12
+  seconds, so each of the eight updates about every 96 seconds, which is
+  5 requests a minute and comfortably inside the free rate limit.
+- **Charts** come from Yahoo Finance and need no key at all. One symbol
+  is fetched every 30 seconds, so the eight refresh about every four
+  minutes. This is an undocumented endpoint with no contract behind it,
+  so it may change or stop working without notice. If it does, the panels
+  keep showing prices and the rest of the device is unaffected.
+
+Line charts rather than candlesticks: at 58px of panel height and 240px
+of width, a candle body would render about 5px wide with 1px wicks, which
+does not read on this panel.
 
 ## Building and flashing
 
