@@ -66,8 +66,11 @@ void setup() {
   Serial.println("water-reminder: boot");
 
   tft.init();
-  tft.setRotation(1);
-  touch.setRotation(1);
+  // Portrait. 0 and 2 are both portrait, 180 degrees apart; which one puts
+  // the USB connector at the top is confirmed on hardware, not assumed.
+  // Display and touch must always use the same value.
+  tft.setRotation(0);
+  touch.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);

@@ -1,9 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// Display (FNK0114B 2.8" ST7789, landscape)
-#define TFT_HRES 320
-#define TFT_VRES 240
+// Display (FNK0114B 2.8" ST7789, portrait - USB connector at the top)
+#define TFT_HRES 240
+#define TFT_VRES 320
 
 // Touch controller pins (from Freenove reference sketches)
 #define TOUCH_DOUT 39  // Data out (T_DO)
