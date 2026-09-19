@@ -1,8 +1,16 @@
-# Water Reminder
+# esp32-water-reminder
 
-An ESP32 + Freenove 2.8" touch TFT (FNK0114B, ST7789) device that shows a
-full-screen reminder to drink water every 30 minutes, Monday-Friday,
-09:00-18:00 (Europe/Dublin time, DST-aware). Tap the screen to dismiss.
+A desk companion for the Freenove 2.8" ESP32 touch display (FNK0114B,
+ST7789). It shows a full-screen reminder to drink water every 30 minutes,
+Monday-Friday, 09:00-18:00 (Europe/Dublin time, DST-aware) - tap the
+screen to dismiss, or leave it and it clears itself after 30 seconds.
+
+The rest of the time the bottom of the screen carries a live price band
+for eight US tech stocks, hidden outside US market hours.
+
+WiFi credentials and the price API key are entered on the device itself,
+through a setup page it serves over its own access point. Nothing secret
+lives in this repository.
 
 See [docs/superpowers/specs/2026-09-14-water-reminder-design.md](docs/superpowers/specs/2026-09-14-water-reminder-design.md)
 for the full design.
