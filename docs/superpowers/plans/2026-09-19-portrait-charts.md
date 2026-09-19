@@ -10,6 +10,30 @@
 
 **Spec:** [docs/superpowers/specs/2026-09-14-water-reminder-design.md](../specs/2026-09-14-water-reminder-design.md) - see "Addendum: portrait orientation and price charts".
 
+## Execution order: build now, verify later
+
+The device is not connected while this plan is being implemented. Work is
+therefore split:
+
+- **Buildable offline (Tasks 1-6):** every code change, each verified by
+  `arduino-cli compile`. Commit as normal.
+- **Deferred to one connected session (Task 7):** the partition switch,
+  flashing, and every judgement that needs eyes on the panel.
+
+Tasks 1, 2 and 5 each contain a hardware verification step. While the
+device is absent, do NOT treat those steps as blocking: mark them
+deferred, note what has to be checked, and carry on to the next task.
+Task 7 collects them.
+
+Two consequences to be honest about:
+
+- Task 1 picks `setRotation(0)` on the reasonable assumption it puts the
+  USB connector at the top. It may be 180 degrees wrong. That is a
+  one-constant fix in Task 7, not a rebuild.
+- Task 2's layout constants are arithmetic against a 320px-tall screen,
+  not observed values. Expect to nudge them in Task 7, the way the
+  landscape layout needed several rounds.
+
 ## Global Constraints
 
 - Portrait: `TFT_HRES 240`, `TFT_VRES 320`. Display and touch rotation must be the SAME value.
@@ -75,16 +99,11 @@ Both calls must use the same value. Start with 0:
 Run: `arduino-cli compile --fqbn esp32:esp32:esp32 .`
 Expected: compiles clean. The layout will look wrong - that is Task 2's job.
 
-- [ ] **Step 4: Flash and check which way up it is**
+- [ ] **Step 4: DEFERRED to Task 7 - which way up is it?**
 
-```bash
-arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 --board-options UploadSpeed=115200 .
-```
+Requires the device. Do not block on this; `setRotation(0)` is the working assumption until the panel says otherwise.
 
-Ask the owner: with the board standing upright and the USB connector at the top, is the text the right way up, or upside down?
-
-- If upside down, change BOTH calls to `setRotation(2)`, recompile, reflash, confirm again.
-- Record the working value in this task before proceeding.
+To check in Task 7: with the board upright and the USB connector at the top, is the text the right way up? If upside down, change BOTH calls to `setRotation(2)` and reflash. Nothing else depends on which value is correct.
 
 - [ ] **Step 5: Commit**
 
@@ -147,9 +166,11 @@ void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &st
 Run: `arduino-cli compile --fqbn esp32:esp32:esp32 .`
 Expected: compiles clean, no unused-variable warnings.
 
-- [ ] **Step 4: Flash and confirm with the owner**
+- [ ] **Step 4: DEFERRED to Task 7 - confirm the layout**
 
-The clock should sit near the top, correctly centred horizontally, with the lower two thirds empty. Confirm the clock is not clipped at the top and the AM/PM still sits on the digits' baseline.
+Requires the device. The constants are arithmetic, not observed.
+
+To check in Task 7: the clock sits near the top, horizontally centred, not clipped at the top edge, with the AM/PM on the digits' baseline and the lower two thirds empty. Expect to nudge `IDLE_CLOCK_Y`; everything below derives from it.
 
 - [ ] **Step 5: Commit**
 
@@ -577,19 +598,16 @@ In the `STATE_ALERT` dismissal branch, replace `tickerBandVisible = false;` with
 Run: `arduino-cli compile --fqbn esp32:esp32:esp32 .`
 Expected: compiles clean.
 
-- [ ] **Step 6: Flash and verify with the owner**
+- [ ] **Step 6: DEFERRED to Task 7 - verify the panels**
 
-```bash
-arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 --board-options UploadSpeed=115200 .
-```
+Requires the device. To check in Task 7:
 
-During US market hours (14:30-21:00 Dublin), confirm:
 1. Two panels, each with symbol, percent, price and a line chart.
 2. The pair advances every 5 seconds through all eight symbols.
 3. The clock above does not flicker.
 4. A reminder still fires, and after dismissing it the panels come back.
 
-Outside market hours the panels still show the last session, since Yahoo keeps returning it.
+Charts render at any hour, since Yahoo keeps serving the last session. Live movement needs US market hours (14:30-21:00 Dublin), but presence of the charts does not.
 
 - [ ] **Step 7: Commit**
 
@@ -632,4 +650,63 @@ Update the opening paragraph to say portrait and charts rather than a landscape 
 ```bash
 git add README.md
 git commit -m "Document the portrait layout and price charts"
+```
+
+---
+
+## Task 7: The connected session
+
+Everything above is built and compiling but has never run. This task is done with the device plugged in, in one sitting, with the owner watching the panel.
+
+**Files:**
+- Modify: `water-reminder.ino` (only if the rotation is wrong)
+- Modify: `ui.cpp` (layout nudges)
+
+**Interfaces:**
+- Consumes: Tasks 1-6.
+- Produces: a working portrait device.
+
+- [ ] **Step 1: Repartition to huge_app**
+
+Do this FIRST, before any verification, because it erases NVS and the owner has to re-enter credentials once. Doing it first means one re-entry, not two.
+
+```bash
+arduino-cli compile --fqbn esp32:esp32:esp32 --board-options PartitionScheme=huge_app .
+arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 \
+  --board-options PartitionScheme=huge_app --board-options UploadSpeed=115200 .
+```
+
+Expected: usage falls from about 88% to about 37%, with roughly 1.9 MB free.
+
+NVS is erased, so the device will open its setup portal. The owner rejoins `WaterReminder-Setup` and re-enters WiFi credentials and the Finnhub API key.
+
+Record the flag in the README so future flashes use it; a normal flash without it would not fit the new layout.
+
+- [ ] **Step 2: Rotation - which way up?**
+
+With the board upright, connector at the top: is the text the right way up?
+
+If upside down, change BOTH `setRotation(0)` calls in `water-reminder.ino` to `setRotation(2)`, recompile with the huge_app flag, reflash.
+
+- [ ] **Step 3: Idle layout**
+
+Check the clock is not clipped at the top, is horizontally centred, and the AM/PM sits on the digits' baseline. Nudge `IDLE_CLOCK_Y` in `ui.cpp` if not; everything below derives from it.
+
+- [ ] **Step 4: Panels**
+
+Check the four points listed in Task 5 Step 6. Likely adjustments: `PANEL_TOP`, `PANEL_H`, `PANEL_CHART_H`, and the `PANEL_*_DY` offsets.
+
+- [ ] **Step 5: Reminder still works**
+
+The device's actual job. Confirm an alert fires, flashes, and dismisses on tap and on timeout, and that the panels return afterwards.
+
+Use `DEBUG_FAST_SCHEDULE` in `config.h` to avoid waiting for a real half-hour mark. Turn it back off and reflash before finishing.
+
+- [ ] **Step 6: Commit whatever the panel taught us**
+
+```bash
+git add -A
+git commit -m "Tune the portrait layout on hardware
+
+Values that were arithmetic in Tasks 1-6, corrected against the panel."
 ```
