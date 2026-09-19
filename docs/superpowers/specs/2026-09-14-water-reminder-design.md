@@ -42,6 +42,47 @@ don't have to remember on their own.
   DAC/I2S path or a simple `ledc` PWM tone, decided then. Full-screen
   tap-to-dismiss is the sole alert channel for this build.
 
+## Addendum: portrait orientation and price charts (2026-09-19)
+
+The device rotates to portrait (240 wide x 320 tall) and the price band is
+replaced by two stacked chart panels. This supersedes the landscape band
+described in the ticker addendum below; that addendum stays as the record
+of what v0.0.1 shipped.
+
+- **Orientation**: portrait, USB connector at the top. `setRotation` is 0
+  or 2 (both portrait, 180 apart); which one puts the connector up is
+  determined on hardware at the first flash, not assumed. Display and
+  touch must use the same value. TFT_Touch handles all four rotations, so
+  touch remains functional either way.
+- **Layout**: clock block at the top, then two stacked symbol panels
+  separated by an edge-to-edge divider. Each panel carries the symbol and
+  percent change on one line, the price on the next, and a line chart
+  below. The weekday and next-reminder rows are removed to make room; the
+  status they carried is dropped rather than relocated.
+- **Charts**: line charts, not candlesticks. At 78px of panel height and
+  ~8.8px per point, candle bodies would render about 5px wide with 1px
+  wicks. Lines read better at that size and cost less to draw. A dashed
+  reference line marks the previous close, so points above it are up on
+  the day.
+- **Chart source**: Yahoo Finance
+  (`query1.finance.yahoo.com/v8/finance/chart/<SYM>?range=1d&interval=15m`),
+  keyless. Verified to return 27 candles in ~3.6KB with a plain
+  non-browser user-agent, and to keep returning data outside market hours.
+  This is an UNDOCUMENTED endpoint with no contract: it may change shape
+  or start refusing requests without notice. Charts must degrade to
+  prices-only rather than breaking the device.
+- **Chart refresh**: one symbol every 30s, so eight refresh about every
+  4 minutes. This is a second request per symbol on top of the existing
+  Finnhub quote, roughly doubling outbound traffic. Eight rapid requests
+  were observed to return 200, so the cadence is well within tolerance.
+- **Storage**: 27 points x 8 symbols is ~3.5KB of RAM against 276KB free.
+- **Separation**: charts live in their own module and own no price state.
+  A Yahoo outage costs charts only; the Finnhub-backed prices, the clock,
+  and the reminder are unaffected.
+- **Retuning**: every vertical position on the idle screen was tuned by
+  hand against a 240px-tall screen. On a 320px-tall screen they are all
+  invalid and must be re-derived on hardware.
+
 ## Addendum: share price ticker (2026-09-14)
 
 A share-price band occupies the previously-empty bottom strip of the idle
