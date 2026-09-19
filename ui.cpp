@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "config.h"
+#include "chart.h"
 #include "ticker.h"
 #include <string.h> // strcmp, for diffing what's already on screen
 // FreeSansBold24pt7b is already pulled in transitively via TFT_eSPI.h ->
@@ -182,11 +183,20 @@ void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color) {
 // for two 22px lines of FreeSansBold9pt7b plus padding. A single 35px
 // line could not fit "GOOGL $333.08 ^0.24%" across a half-width column
 // at bold weight, which is what caused the columns to overlap.
-static const int TICKER_BAND_TOP = 178;
-static const int TICKER_BAND_H   = 62;
+// Two stacked panels fill the lower two thirds of the portrait screen.
+// Each is 118px tall: a header line, a price line, then the chart.
+//
+// Arithmetic against a 320px-tall screen, not observed. Expect to nudge
+// these once the panel is connected.
+static const int PANEL_TOP[2]   = { 84, 202 };
+static const int PANEL_H        = 118;
+static const int PANEL_HDR_DY   = 16;   // header baseline within the panel
+static const int PANEL_PRICE_DY = 44;   // price baseline within the panel
+static const int PANEL_CHART_DY = 56;   // chart top within the panel
+static const int PANEL_CHART_H  = 58;
 
-void uiClearTickerBand(TFT_eSPI &tft) {
-  tft.fillRect(0, TICKER_BAND_TOP, TFT_HRES, TICKER_BAND_H, TFT_BLACK);
+void uiClearChartPanels(TFT_eSPI &tft) {
+  tft.fillRect(0, PANEL_TOP[0], TFT_HRES, PANEL_H * 2, TFT_BLACK);
 }
 
 // Draws a small up/down triangle - shape-drawn, since there is no emoji
@@ -200,114 +210,84 @@ static void drawTrendArrow(TFT_eSPI &tft, int cx, int cy, bool up, uint16_t colo
   }
 }
 
-// Two symbols per page, each in its own fixed half-width column, so a
-// given symbol always lands in the same place rather than shifting
-// between cycles.
-static const int TICKER_PER_PAGE = 2;
-
-int uiTickerPageCount() {
-  if (!tickerHasApiKey()) return 0;
-  int n = tickerSymbolCount();
-  if (n <= 0) return 0;
-  return (n + TICKER_PER_PAGE - 1) / TICKER_PER_PAGE; // round up
+// Maps a price to a y coordinate inside a panel's chart area.
+static int chartY(float v, float lo, float hi, int top, int h) {
+  if (hi <= lo) return top + h / 2;
+  const int pad = 3;
+  float t = (hi - v) / (hi - lo);
+  return top + pad + (int)(t * (h - pad * 2));
 }
 
-// Draws one entry on two lines within the column starting at colX:
-// the symbol on top, then the price and percent change beneath it.
-// Splitting across two lines is what lets both columns hold full bold
-// text without colliding.
-static void drawTickerEntry(TFT_eSPI &tft, int index, int colX, int lineOneY,
-                            int lineTwoY) {
+void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex) {
+  if (slot < 0 || slot > 1) return;
+  const int top = PANEL_TOP[slot];
+  tft.fillRect(0, top, TFT_HRES, PANEL_H, TFT_BLACK);
+
+  // Edge-to-edge divider above the lower panel.
+  if (slot == 1) tft.drawFastHLine(0, top - 2, TFT_HRES, TFT_DARKGREY);
+
   String sym;
   float price, pct;
   bool valid;
-  if (!tickerEntry(index, sym, price, pct, valid)) return;
+  if (!tickerEntry(symbolIndex, sym, price, pct, valid)) return;
 
   tft.setFreeFont(&FreeSansBold9pt7b);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(sym, 6, top + PANEL_HDR_DY);
 
-  if (!valid) { // no successful fetch for this symbol yet
+  if (valid) {
+    bool up = pct >= 0.0f;
+    uint16_t c = up ? TFT_GREEN : TFT_RED;
+    char pctBuf[16];
+    snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
+    int pctW = tft.textWidth(pctBuf);
+    tft.setTextColor(c, TFT_BLACK);
+    tft.drawString(pctBuf, TFT_HRES - 6 - pctW, top + PANEL_HDR_DY);
+    drawTrendArrow(tft, TFT_HRES - 12 - pctW, top + PANEL_HDR_DY + 8, up, c);
+
+    char priceBuf[16];
+    snprintf(priceBuf, sizeof(priceBuf), "%.2f", price);
+    tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+    tft.drawString("$", 6, top + PANEL_PRICE_DY);
+    int dollarW = tft.textWidth("$");
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString(sym, colX, lineOneY);
+    tft.drawString(priceBuf, 6 + dollarW, top + PANEL_PRICE_DY);
+  } else {
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.drawString("--", colX, lineTwoY);
-    tft.setFreeFont(NULL);
-    return;
+    tft.drawString("--", 6, top + PANEL_PRICE_DY);
   }
-
-  // Measure line two before drawing anything, so line one's symbol can be
-  // centred over it. Line two is: "$" + price, a gap, the arrow, a gap,
-  // then the percent.
-  const int arrowGap = 10;  // price -> arrow centre
-  const int pctGap   = 18;  // price -> percent text
-  char dollarBuf[2] = "$";
-  char priceBuf[16];
-  snprintf(priceBuf, sizeof(priceBuf), "%.2f", price);
-  char pctBuf[16];
-  snprintf(pctBuf, sizeof(pctBuf), "%.2f%%", pct < 0 ? -pct : pct);
-
-  int dollarW = tft.textWidth(dollarBuf);
-  int numberW = tft.textWidth(priceBuf);
-  int pctW    = tft.textWidth(pctBuf);
-  int lineTwoW = dollarW + numberW + pctGap + pctW;
-
-  // Line one: the symbol, centred over line two rather than left-aligned,
-  // so each entry reads as one stacked unit.
-  int symW = tft.textWidth(sym);
-  int symX = colX + (lineTwoW - symW) / 2;
-  if (symX < colX) symX = colX; // never push a long symbol left of its column
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(sym, symX, lineOneY);
-
-  // Line two: the "$" in the same amber as the clock's AM/PM, so the
-  // currency marker reads as a unit label rather than part of the number.
-  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-  tft.drawString(dollarBuf, colX, lineTwoY);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(priceBuf, colX + dollarW, lineTwoY);
-
-  bool up = pct >= 0.0f;
-  uint16_t c = up ? TFT_GREEN : TFT_RED;
-  int priceEndX = colX + dollarW + numberW;
-  drawTrendArrow(tft, priceEndX + arrowGap, lineTwoY, up, c);
-  tft.setTextColor(c, TFT_BLACK);
-  tft.drawString(pctBuf, priceEndX + pctGap, lineTwoY);
   tft.setFreeFont(NULL);
-}
+  tft.setTextDatum(MC_DATUM);
 
-void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex) {
-  uiClearTickerBand(tft);
+  // Chart.
+  float lo, hi, prevClose;
+  int n = chartPointCount(symbolIndex);
+  if (n < 2 || !chartRange(symbolIndex, lo, hi, prevClose)) return;
 
-  // Two 22px lines inside the 62px band, with even padding above, between
-  // and below: symbol on the first line, price and change on the second.
-  const int lineOneY = TICKER_BAND_TOP + 18;
-  const int lineTwoY = TICKER_BAND_TOP + 44;
-  const int centreY  = TICKER_BAND_TOP + TICKER_BAND_H / 2;
+  const int cTop = top + PANEL_CHART_DY;
 
-  tft.setTextDatum(ML_DATUM);
-  tft.setFreeFont(NULL);
-
-  if (!tickerHasApiKey()) {
-    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.drawString("Ticker: no API key", 8, centreY, 2);
-    tft.setTextDatum(MC_DATUM);
-    return;
+  // Dashed reference line at the previous close, so points above it are
+  // up on the day. Drawn first so the series sits over it.
+  if (prevClose > 0) {
+    int ry = chartY(prevClose, lo, hi, cTop, PANEL_CHART_H);
+    for (int x = 0; x < TFT_HRES; x += 7) {
+      tft.drawFastHLine(x, ry, 3, TFT_DARKGREY);
+    }
   }
 
-  int pages = uiTickerPageCount();
-  if (pages <= 0) {
-    tft.setTextDatum(MC_DATUM);
-    return;
+  uint16_t lineCol = TFT_GREEN;
+  float lastClose;
+  if (chartPoint(symbolIndex, n - 1, lastClose) && prevClose > 0 && lastClose < prevClose) {
+    lineCol = TFT_RED;
   }
 
-  int page = ((pageIndex % pages) + pages) % pages; // tolerate any input
-  int first = page * TICKER_PER_PAGE;
-  const int colW = TFT_HRES / TICKER_PER_PAGE;
-
-  for (int slot = 0; slot < TICKER_PER_PAGE; slot++) {
-    int index = first + slot;
-    if (index >= tickerSymbolCount()) break; // short final page, if any
-    drawTickerEntry(tft, index, slot * colW + 8, lineOneY, lineTwoY);
+  float a, b;
+  for (int i = 1; i < n; i++) {
+    if (!chartPoint(symbolIndex, i - 1, a) || !chartPoint(symbolIndex, i, b)) continue;
+    int x0 = ((i - 1) * (TFT_HRES - 1)) / (n - 1);
+    int x1 = (i * (TFT_HRES - 1)) / (n - 1);
+    tft.drawLine(x0, chartY(a, lo, hi, cTop, PANEL_CHART_H),
+                 x1, chartY(b, lo, hi, cTop, PANEL_CHART_H), lineCol);
   }
-
-  tft.setTextDatum(MC_DATUM); // restore the datum the other screens expect
 }

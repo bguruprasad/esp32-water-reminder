@@ -30,20 +30,17 @@ enum AlertFlashColor { ALERT_RED, ALERT_AMBER, ALERT_GREEN };
 // timeout) - this just paints one frame per call.
 void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color);
 
-// Renders one page of the share-price band: two symbols side by side, in
-// bold, held static. Pages are instant-swapped by the caller rather than
-// scrolled - a scrolling marquee had to clear and repaint the whole strip
-// ~25 times a second, which visibly flickered.
+// Renders one symbol panel: the symbol and percent change on one line,
+// the price below, then a line chart of the day. slot 0 is the upper
+// panel, slot 1 the lower. Repaints only that panel's own strip, so it
+// never disturbs the clock above it.
 //
-// Call this only when the page actually changes (or its data does), not
-// every tick. pageIndex is taken modulo the available page count.
-void uiDrawTickerPage(TFT_eSPI &tft, int pageIndex);
+// Call this only when the displayed pair actually changes, not every
+// tick. Repainting on every frame is what made the old scrolling band
+// flicker.
+void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex);
 
-// Number of pages needed to show every symbol two at a time. Returns 0
-// when there is nothing to show (e.g. no API key stored).
-int uiTickerPageCount();
-
-// Blanks the band's strip - used when the market is shut.
-void uiClearTickerBand(TFT_eSPI &tft);
+// Blanks both panel strips and the divider between them.
+void uiClearChartPanels(TFT_eSPI &tft);
 
 #endif
