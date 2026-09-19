@@ -3,6 +3,7 @@
 #include "time_sync.h"
 #include "schedule.h"
 #include "ticker.h"
+#include "chart.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -25,18 +26,20 @@ static unsigned long alertStartedAtMs = 0;
 static unsigned long lastFlashStepAtMs = 0;
 static AlertFlashColor alertColor = ALERT_RED;
 
-// Ticker band paging state. The band shows two symbols at a time and
-// swaps to the next pair every TICKER_PAGE_MS; it is hidden entirely
-// when the market is shut.
+// Chart panel state. Two symbols are shown at a time, advancing to the
+// next pair every PANEL_PAGE_MS.
 //
-// This replaced a scrolling marquee, which had to clear and repaint the
-// whole strip ~25 times a second and visibly flickered. Here the strip
-// is repainted only when the page actually changes - once per 5s - which
-// is the same repaint-on-change discipline that fixed the clock flicker.
-static const unsigned long TICKER_PAGE_MS = 5000;
-static unsigned long lastTickerPageMs = 0;
-static int tickerPage = 0;
-static bool tickerBandVisible = false;
+// The panels are repainted only when the pair actually changes - once
+// per 5s - which is the same repaint-on-change discipline that fixed the
+// clock flicker and, before that, the scrolling band's flicker.
+//
+// Unlike the old band, the panels are NOT hidden outside market hours:
+// Yahoo keeps serving the last session, so there is always a chart to
+// show. Only the Finnhub price fetching pauses when the market is shut.
+static const unsigned long PANEL_PAGE_MS = 5000;
+static unsigned long lastPanelPageMs = 0;
+static int panelPair = 0;
+static bool panelsVisible = false;
 
 static AlertFlashColor nextAlertColor(AlertFlashColor c) {
   switch (c) {
@@ -98,6 +101,7 @@ void setup() {
   lastFiredMarkInitialized = true;
 
   tickerBegin();
+  chartBegin();
 }
 
 void loop() {
@@ -112,31 +116,30 @@ void loop() {
     // in practice this redraws about once a minute.
     uiUpdateIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
 
-    tickerPump(); // non-blocking; at most one fetch per 12s, market hours only
+    tickerPump(); // prices, Finnhub, market hours only (checked internally)
+    chartPump();  // candles, Yahoo, at most one symbol per 30s
 
-    bool marketOpen = tickerIsMarketOpen(now); // epoch, not local time
-    if (!marketOpen) {
-      if (tickerBandVisible) { // hide once, not every tick
-        uiClearTickerBand(tft);
-        tickerBandVisible = false;
-      }
-    } else if (!tickerBandVisible) {
-      // Entering market hours (or returning from an alert, which wiped
-      // the strip): draw the current page immediately rather than
-      // waiting out a full dwell with a blank band.
-      lastTickerPageMs = millis();
-      uiDrawTickerPage(tft, tickerPage);
-      tickerBandVisible = true;
-    } else if (millis() - lastTickerPageMs >= TICKER_PAGE_MS) {
+    // No market-hours gate here: Yahoo keeps serving the last session, so
+    // there is always a chart worth showing. Only price fetching pauses.
+    int symbolCount = tickerSymbolCount();
+    int pairCount = symbolCount > 0 ? (symbolCount + 1) / 2 : 0;
+
+    if (pairCount == 0) {
+      if (panelsVisible) { uiClearChartPanels(tft); panelsVisible = false; }
+    } else if (!panelsVisible) {
+      // First paint, or returning from an alert that wiped the screen:
+      // draw immediately rather than waiting out a full dwell blank.
+      lastPanelPageMs = millis();
+      uiDrawChartPanel(tft, 0, panelPair * 2);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
+      panelsVisible = true;
+    } else if (millis() - lastPanelPageMs >= PANEL_PAGE_MS) {
       // Dwell elapsed: advance to the next pair. This is the ONLY place
-      // the strip is repainted during steady state - once per 5s, not
-      // ~25 times a second as the old scrolling band did.
-      lastTickerPageMs = millis();
-      int pages = uiTickerPageCount();
-      if (pages > 0) {
-        tickerPage = (tickerPage + 1) % pages;
-      }
-      uiDrawTickerPage(tft, tickerPage);
+      // the panels are repainted during steady state.
+      lastPanelPageMs = millis();
+      panelPair = (panelPair + 1) % pairCount;
+      uiDrawChartPanel(tft, 0, panelPair * 2);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
     }
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&
@@ -171,7 +174,7 @@ void loop() {
       lastFiredMark = scheduleFloorToMark(nowLocal);
       appState = STATE_IDLE;
       uiDrawIdleScreen(tft, nowLocal, buildStatusLine(nowLocal));
-      tickerBandVisible = false; // full repaint wiped the band; let it redraw
+      panelsVisible = false; // full repaint wiped the panels; let them redraw
     } else if (millis() - lastFlashStepAtMs >= ALERT_FLASH_STEP_MS) {
       lastFlashStepAtMs = millis();
       alertColor = nextAlertColor(alertColor);
