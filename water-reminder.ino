@@ -79,9 +79,46 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  // Touch the screen during the window below to reach the setup portal
+  // even when the saved WiFi credentials are perfectly good. Without
+  // this the portal is only reachable by making the connection fail,
+  // which means switching off a router or carrying the device out of
+  // range just to change a setting.
+  //
+  // A single touch ANY TIME in the window, rather than a touch already
+  // held at the instant of boot: the ESP32 is ready in well under a
+  // second, so a hold-at-boot gesture demands a finger already on the
+  // glass before the USB plug is seated. That is not a gesture a person
+  // can reliably perform.
+  //
+  // It still requires a PHYSICAL TOUCH, which is the whole safety
+  // property: the portal ends in ESP.restart(), so anything that forced
+  // it automatically would re-trigger on that reboot and loop forever.
+  // A finger cannot press itself during an unattended restart, so this
+  // cannot strand the device the way an unconditional force would.
+  bool reconfigure = false;
+  {
+    const unsigned long WINDOW_MS = 8000;
+    unsigned long start = millis();
+    int lastShown = -1;
+    while (millis() - start < WINDOW_MS) {
+      if (touch.Pressed()) { reconfigure = true; break; }
+      int remaining = (int)((WINDOW_MS - (millis() - start) + 999) / 1000);
+      if (remaining != lastShown) { // repaint only when the digit changes
+        lastShown = remaining;
+        tft.fillRect(0, TFT_VRES / 2 - 24, TFT_HRES, 48, TFT_BLACK);
+        tft.drawString("Touch for setup", TFT_HRES / 2, TFT_VRES / 2 - 10, 2);
+        tft.drawString(String(remaining), TFT_HRES / 2, TFT_VRES / 2 + 12, 2);
+      }
+      delay(20);
+    }
+  }
+
+  tft.fillScreen(TFT_BLACK);
   tft.drawString("Connecting to WiFi...", TFT_HRES / 2, TFT_VRES / 2, 2);
 
-  if (!wifiSetupConnect()) {
+  if (reconfigure || !wifiSetupConnect()) {
     tft.fillScreen(TFT_BLACK);
     tft.drawString("Join 'WaterReminder-Setup'", TFT_HRES / 2, TFT_VRES / 2 - 10, 2);
     tft.drawString("WiFi to configure", TFT_HRES / 2, TFT_VRES / 2 + 10, 2);

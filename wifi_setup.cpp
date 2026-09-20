@@ -8,6 +8,11 @@ static const char *NVS_NAMESPACE = "wifi";
 static const char *NVS_KEY_SSID = "ssid";
 static const char *NVS_KEY_PASS = "pass";
 static const char *NVS_KEY_APIKEY = "apikey";
+// NVS key names are capped at 15 characters.
+static const char *NVS_KEY_EDDISN = "eddisn";
+static const char *NVS_KEY_EDDIKEY = "eddikey";
+static const char *NVS_KEY_TGTOKEN = "tgtoken";
+static const char *NVS_KEY_TGCHAT = "tgchat";
 static const char *AP_SSID = "WaterReminder-Setup";
 static const byte DNS_PORT = 53;
 
@@ -17,6 +22,10 @@ static bool credentialsSaved = false;
 static String submittedSsid;
 static String submittedPass;
 static String submittedApiKey;
+static String submittedEddiSn;
+static String submittedEddiKey;
+static String submittedTgToken;
+static String submittedTgChat;
 
 static const char *FORM_HTML =
   "<!DOCTYPE html><html><head><meta name='viewport' "
@@ -29,6 +38,15 @@ static const char *FORM_HTML =
   "Finnhub API key (optional):<br>"
   "<input name='apikey' type='password' maxlength='64'><br>"
   "<small>Leave blank to run without the price ticker.</small><br><br>"
+  "<hr>Eddi (optional):<br>"
+  "Hub serial:<br><input name='eddisn' maxlength='32'><br>"
+  "myenergi API key:<br>"
+  "<input name='eddikey' type='password' maxlength='64'><br>"
+  "<small>Leave blank to run without the Eddi status pill.</small><br><br>"
+  "Telegram bot token (optional):<br>"
+  "<input name='tgtoken' type='password' maxlength='64'><br>"
+  "Telegram chat ID:<br><input name='tgchat' maxlength='32'><br>"
+  "<small>Both needed for Eddi status change alerts.</small><br><br>"
   "<input type='submit' value='Save and Connect'>"
   "</form></body></html>";
 
@@ -40,6 +58,10 @@ static void handleSave() {
   submittedSsid = webServer.arg("ssid");
   submittedPass = webServer.arg("pass");
   submittedApiKey = webServer.arg("apikey");
+  submittedEddiSn = webServer.arg("eddisn");
+  submittedEddiKey = webServer.arg("eddikey");
+  submittedTgToken = webServer.arg("tgtoken");
+  submittedTgChat = webServer.arg("tgchat");
   credentialsSaved = true;
   webServer.send(200, "text/html",
     "<html><body><h2>Saved. Rebooting...</h2></body></html>");
@@ -112,6 +134,10 @@ void wifiSetupStartPortal() {
       prefs.putString(NVS_KEY_SSID, submittedSsid);
       prefs.putString(NVS_KEY_PASS, submittedPass);
       prefs.putString(NVS_KEY_APIKEY, submittedApiKey);
+      prefs.putString(NVS_KEY_EDDISN, submittedEddiSn);
+      prefs.putString(NVS_KEY_EDDIKEY, submittedEddiKey);
+      prefs.putString(NVS_KEY_TGTOKEN, submittedTgToken);
+      prefs.putString(NVS_KEY_TGCHAT, submittedTgChat);
       prefs.end();
       delay(500);
       ESP.restart();
@@ -119,10 +145,33 @@ void wifiSetupStartPortal() {
   }
 }
 
-String wifiSetupApiKey() {
+// Reads one saved string from NVS. All the credential getters are the
+// same three lines around a different key, so they share this rather
+// than repeating the open/read/close dance five times.
+static String readSetting(const char *key) {
   Preferences prefs;
   prefs.begin(NVS_NAMESPACE, true); // read-only
-  String key = prefs.getString(NVS_KEY_APIKEY, "");
+  String value = prefs.getString(key, "");
   prefs.end();
-  return key;
+  return value;
+}
+
+String wifiSetupApiKey() {
+  return readSetting(NVS_KEY_APIKEY);
+}
+
+String wifiSetupEddiSerial() {
+  return readSetting(NVS_KEY_EDDISN);
+}
+
+String wifiSetupEddiKey() {
+  return readSetting(NVS_KEY_EDDIKEY);
+}
+
+String wifiSetupTgToken() {
+  return readSetting(NVS_KEY_TGTOKEN);
+}
+
+String wifiSetupTgChat() {
+  return readSetting(NVS_KEY_TGCHAT);
 }

@@ -1,0 +1,21 @@
+# Arduino build output, if a local build path is ever used.
+build/
+*.elf
+*.bin
+*.map
+
+# Nothing secret should ever exist as a file in this project: WiFi
+# credentials, the Finnhub key, the myenergi hub serial and API key, and
+# the Telegram bot token are all typed into the device's setup portal and
+# stored in NVS.
+#
+# These patterns are a safety net, not a sanctioned place to put a
+# secret. A file matched here is still one `git add -f` away from being
+# committed, and a secret that reaches history cannot be removed by
+# deleting the file afterwards.
+.env
+.env.*
+secrets.h
+credentials.h
+*_secret.*
+*_secrets.*
