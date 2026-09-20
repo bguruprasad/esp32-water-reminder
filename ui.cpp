@@ -2,6 +2,7 @@
 #include "config.h"
 #include "chart.h"
 #include "ticker.h"
+#include "eddi.h"
 #include <string.h> // strcmp, for diffing what's already on screen
 // FreeSansBold24pt7b is already pulled in transitively via TFT_eSPI.h ->
 // gfxfont.h (which includes all 48 GFXFF fonts when LOAD_GFXFF is
@@ -23,10 +24,56 @@ static int to12Hour(int hour24, bool *isAm) {
 // These are arithmetic against a 320px-tall screen, not observed values.
 // The landscape constants they replace took several rounds on hardware
 // to settle, so expect these to need the same.
-static const int IDLE_CLOCK_Y   = 34;   // vertical middle of the big digits
+// Raised from 34 to 28 to open the status row below. The gap between the
+// clock block and the first chart panel was y=64 to y=84, only 20px, and
+// the row needs 26. The panels cannot move down instead: PANEL_TOP[1]
+// plus PANEL_H already lands exactly on 320, the bottom of the screen.
+static const int IDLE_CLOCK_Y   = 28;   // vertical middle of the big digits
 static const int IDLE_AMPM_GAP  = 6;
 // FreeSansBold9pt7b yAdvance.
 static const int IDLE_SMALL_FONT_H = 22;
+
+// Status row: Eddi pill on the left, weekday on the right, both in the
+// Eddi's status colour so the whole row reads as one indicator.
+//
+// Full weekday names fit because the pill shows a drawn symbol rather
+// than a status word. "Max Temp Reached" is about 160px of text before
+// pill padding, which left no room beside it; the symbol is about 12px,
+// so the longest pairing is now roughly 70 + 90 = 160px of the 240
+// available.
+// The clock band ends at y=58 and PANEL_TOP[0] is 84, so the row has
+// 26px to live in.
+//
+// Two passes to get here. At 24px centred on 72 the row spanned 60..84,
+// and 84 is the exact row the first panel starts painting, so the panel
+// covered the pill's bottom edge. At 22px centred on 70 it spanned
+// 59..81 - arithmetically clear, but still read as cut off, because the
+// corner radius was IDLE_ROW_H/2. On a 22px box that is a fully
+// semicircular cap whose bottom arc is the thinnest part of the stroke,
+// sitting 1px below the clock band.
+//
+// 20px centred on 68 spans 58..78: flush under the clock, 6px clear of
+// the panel. The radius is now fixed and small, so the outline reads as
+// a rounded rectangle rather than a lozenge with vanishing arcs.
+static const int IDLE_ROW_Y = 70;   // vertical centre of the row
+static const int IDLE_ROW_H = 24;
+static const int IDLE_PILL_R = 6;   // corner radius, not half the height
+
+// The label is drawn this many pixels ABOVE the row centre.
+//
+// Repositioning the pill four times never fixed its missing bottom line,
+// because the pill was never the problem: the label was sitting on top
+// of that stroke and erasing it. ML_DATUM on a GFX free font centres the
+// text using the font's full height, descender space included, so the
+// visible glyphs land low in the box - the same datum quirk that pushed
+// the AM/PM label below the clock's baseline earlier in this project.
+//
+// Lifting the text clears the stroke, and the extra row height gives it
+// somewhere to go.
+static const int IDLE_ROW_TEXT_DY = 2;
+static const char *WEEKDAY_NAMES[7] = {"Sunday", "Monday", "Tuesday",
+                                       "Wednesday", "Thursday", "Friday",
+                                       "Saturday"};
 
 // What was last painted, so uiUpdateIdleScreen() can repaint only what
 // changed instead of clearing the screen every tick (a full clear once
@@ -34,6 +81,10 @@ static const int IDLE_SMALL_FONT_H = 22;
 static bool idleScreenPainted = false;
 static char lastDigits[6] = "";
 static char lastAmpm[3] = "";
+// Seeded to values no real status or weekday can take, so the first
+// update always paints the row rather than diffing against a lucky zero.
+static int lastRowSta = EDDI_UNKNOWN - 1;
+static int lastRowWday = -1;
 
 static void formatClock(const struct tm &nowLocal, char *digitsOut, size_t digitsLen,
                         const char **ampmOut) {
@@ -92,6 +143,84 @@ static void paintClockRow(TFT_eSPI &tft, const char *digitsBuf, const char *ampm
   tft.setTextDatum(MC_DATUM);
 }
 
+// Transport-control glyphs for the Eddi state, drawn as shapes rather
+// than glyphs: TFT_eSPI has no symbol font, which is the same reason
+// the alert's glass icon is drawn by hand.
+//
+// A symbol is about 12px wide against roughly 90px for the longest
+// status word, which is what removes the width pressure that previously
+// forced both the status and the weekday to be abbreviated.
+static void drawEddiSymbol(TFT_eSPI &tft, int sta, int cx, int cy,
+                           uint16_t col) {
+  const int r = 5; // half-size of the symbol box
+  switch (sta) {
+    case 3: // Diverting: play
+    case 4: // Boosting: play (same shape, colour carries the difference)
+      tft.fillTriangle(cx - r, cy - r, cx - r, cy + r, cx + r, cy, col);
+      break;
+    case 1: // Paused: two bars
+    case 5: // Max Temp Reached: also idle, so also bars
+      tft.fillRect(cx - r, cy - r, 3, 2 * r, col);
+      tft.fillRect(cx + r - 2, cy - r, 3, 2 * r, col);
+      break;
+    case 6: // Stopped: square
+      tft.fillRect(cx - r, cy - r, 2 * r, 2 * r, col);
+      break;
+    default: // Unknown: hollow square, so it reads as "no reading yet"
+      tft.drawRect(cx - r, cy - r, 2 * r, 2 * r, col);
+      break;
+  }
+}
+
+// Paints the status row: the Eddi pill on the left, the weekday on the
+// right, both in the status colour. Clears the row's full width first,
+// since the pill width tracks its label and a shorter status would
+// otherwise leave the tail of a longer one behind.
+static void paintStatusRow(TFT_eSPI &tft, const struct tm &nowLocal) {
+  tft.fillRect(0, IDLE_ROW_Y - IDLE_ROW_H / 2, TFT_HRES, IDLE_ROW_H, TFT_BLACK);
+
+  int sta = eddiStatus();
+  uint16_t col = eddiStatusColor(sta);
+  const char *label = eddiStatusText(sta);
+
+  (void)label; // the state now reads as a symbol, not a word
+
+  tft.setFreeFont(&FreeSansBold9pt7b);
+
+  // The pill fills the cleared band; the label is what moves. See
+  // IDLE_ROW_TEXT_DY for why the bottom stroke kept disappearing.
+  const int rowTop = IDLE_ROW_Y - IDLE_ROW_H / 2;
+  const int pillH = IDLE_ROW_H;
+  const int textY = IDLE_ROW_Y - IDLE_ROW_TEXT_DY;
+
+  // Left pill: "Eddi" then the state symbol. Outline rather than fill,
+  // since a filled pill at this size leaves too little contrast inside.
+  tft.setTextDatum(ML_DATUM);
+  const int textX = 14;
+  int symCx = textX + tft.textWidth("Eddi") + 10; // symbol centre
+  int leftPillW = (symCx + 5) - 4 + 10;           // through symbol + padding
+
+  tft.drawRoundRect(4, rowTop, leftPillW, pillH, IDLE_PILL_R, col);
+  tft.setTextColor(col, TFT_BLACK);
+  tft.drawString("Eddi", textX, textY);
+  drawEddiSymbol(tft, sta, symCx, IDLE_ROW_Y, col);
+
+  // Right pill: the weekday, in a matching outline so the row reads as
+  // one designed pair rather than a pill beside loose text. Sized to its
+  // own text, since "Wednesday" and "Friday" differ by a good 30px.
+  const char *day = WEEKDAY_NAMES[nowLocal.tm_wday % 7];
+  int dayW = tft.textWidth(day);
+  int rightPillW = dayW + 20;
+  int rightPillX = TFT_HRES - 4 - rightPillW;
+
+  tft.drawRoundRect(rightPillX, rowTop, rightPillW, pillH,
+                    IDLE_PILL_R, col);
+  tft.drawString(day, rightPillX + 10, textY);
+
+  tft.setFreeFont(NULL);
+  tft.setTextDatum(MC_DATUM);
+}
+
 void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &statusLine) {
   (void)statusLine; // no status pill in portrait; kept for call-site compatibility
   tft.fillScreen(TFT_BLACK);
@@ -101,9 +230,14 @@ void uiDrawIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &st
   formatClock(nowLocal, digitsBuf, sizeof(digitsBuf), &ampmStr);
 
   paintClockRow(tft, digitsBuf, ampmStr);
+  // Unconditional: this function just cleared the whole screen, so the
+  // row has to be redrawn regardless of whether its content changed.
+  paintStatusRow(tft, nowLocal);
 
   snprintf(lastDigits, sizeof(lastDigits), "%s", digitsBuf);
   snprintf(lastAmpm, sizeof(lastAmpm), "%s", ampmStr);
+  lastRowSta = eddiStatus();
+  lastRowWday = nowLocal.tm_wday;
   idleScreenPainted = true;
 }
 
@@ -121,6 +255,18 @@ void uiUpdateIdleScreen(TFT_eSPI &tft, const struct tm &nowLocal, const String &
     paintClockRow(tft, digitsBuf, ampmStr);
     snprintf(lastDigits, sizeof(lastDigits), "%s", digitsBuf);
     snprintf(lastAmpm, sizeof(lastAmpm), "%s", ampmStr);
+  }
+
+  // The row changes far less often than the clock: the Eddi status holds
+  // for hours at a time and the weekday for a day, so this repaints
+  // almost never. Diffing eddiStatus() rather than consuming
+  // eddiChanged() keeps this idempotent - that flag clears on read, and
+  // a UI running every tick would swallow it before anything else saw it.
+  int sta = eddiStatus();
+  if (sta != lastRowSta || nowLocal.tm_wday != lastRowWday) {
+    paintStatusRow(tft, nowLocal);
+    lastRowSta = sta;
+    lastRowWday = nowLocal.tm_wday;
   }
 }
 
