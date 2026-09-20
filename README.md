@@ -19,7 +19,8 @@ for the full design.
 ## Hardware
 
 - ESP32 dev board + Freenove 2.8" ST7789 touch TFT (FNK0114B)
-- USB connection via CH340 serial (macOS: `/dev/cu.usbserial-120`)
+- USB connection via CH340 serial (macOS: `/dev/cu.usbserial-1120`; the
+  trailing number changes between replugs, so check `ls /dev/cu.usb*`)
 
 ## First-time setup
 
@@ -42,9 +43,12 @@ percent change on one line, the price below it, and a line chart of the
 day's trading with a dashed line at the previous close, so points above
 that line are up on the day.
 
-The charts are shown at all hours. Yahoo keeps serving the most recent
-session, so there is always something to look at; only the price fetching
-pauses when the US market is shut (09:30-16:00 ET, Mon-Fri).
+Prices and charts are both shown at all hours. Yahoo keeps serving the
+most recent session and Finnhub answers with the last close, so outside
+market hours (09:30-16:00 ET, Mon-Fri) a panel shows the previous
+session's chart alongside that session's closing price. The percent
+change is that session's move, so it stops changing once the market
+shuts and resumes when it reopens.
 
 Two data sources, deliberately separate:
 
@@ -71,10 +75,16 @@ Requires `arduino-cli` with the `esp32:esp32` core (3.3.11) installed, and
 the `TFT_eSPI` (configured for FNK0114B) and `TFT_Touch` libraries in the
 Arduino sketchbook.
 
+The device runs the `no_fs` partition scheme (2MB app slot, twice, with
+OTA kept). This is not the board default, so it must be passed on every
+build and upload - a default-scheme flash writes a different partition
+table and erases the saved WiFi credentials.
+
 ```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 .
-arduino-cli upload -p /dev/cu.usbserial-120 --fqbn esp32:esp32:esp32 \
-  --board-options UploadSpeed=115200 .
+arduino-cli compile --fqbn esp32:esp32:esp32 \
+  --board-options PartitionScheme=no_fs .
+arduino-cli upload -p /dev/cu.usbserial-1120 --fqbn esp32:esp32:esp32 \
+  --board-options PartitionScheme=no_fs,UploadSpeed=115200 .
 ```
 
 ## Debug mode

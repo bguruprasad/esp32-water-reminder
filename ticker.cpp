@@ -151,7 +151,22 @@ void tickerPump() {
   if (apiKey.length() == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
 
-  if (!tickerIsMarketOpen(time(nullptr))) return; // no fetching while shut
+  // Deliberately NOT gated on market hours. Finnhub keeps serving /quote
+  // when the market is shut: it answers with the last close, so a weekend
+  // panel shows Friday's real price instead of a placeholder.
+  //
+  // The gate that used to sit here was meant to spare the free tier, but
+  // it never saved anything. The rate is fixed by the fetch interval, not
+  // by the calendar: 8 symbols at one per 12s is 5 requests a minute
+  // against a 60/minute limit, whether or not the market is open.
+  //
+  // It also made the panel contradict itself. The charts were always
+  // ungated (Yahoo serves the most recent session at all hours), so a
+  // weekend panel drew Friday's chart next to a "--" where Friday's
+  // closing price belonged. Prices and charts now follow the same rule.
+  //
+  // tickerIsMarketOpen() is kept: knowing the market state is still
+  // useful, it just no longer blocks fetching.
 
   if (millis() - lastFetchAtMs < TICKER_FETCH_INTERVAL_MS) return;
   lastFetchAtMs = millis();

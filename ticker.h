@@ -8,7 +8,9 @@
 void tickerBegin();
 
 // Call every loop(). Non-blocking: fetches at most one symbol per
-// TICKER_FETCH_INTERVAL_MS, and only while the US market is open.
+// TICKER_FETCH_INTERVAL_MS, at all hours. Outside market hours Finnhub
+// returns the last close, which is worth showing, so fetching is not
+// gated on the market being open.
 void tickerPump();
 
 // True during US market hours: 09:30-16:00 US Eastern, Mon-Fri.
