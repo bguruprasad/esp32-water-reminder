@@ -5,6 +5,7 @@
 #include "ticker.h"
 #include "chart.h"
 #include "notify.h"
+#include "eddi.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -143,6 +144,7 @@ void setup() {
   tickerBegin();
   chartBegin();
   notifyBegin();
+  eddiBegin();
 }
 
 void loop() {
@@ -159,6 +161,7 @@ void loop() {
 
     tickerPump(); // prices, Finnhub, market hours only (checked internally)
     chartPump();  // candles, Yahoo, at most one symbol per 30s
+    eddiPump();   // Eddi status, myenergi, at most once per 30s
 
     // No market-hours gate here: Yahoo keeps serving the last session, so
     // there is always a chart worth showing. Only price fetching pauses.
