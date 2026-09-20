@@ -267,8 +267,11 @@ addendum replaces it.
 - Two commands, both the same Digest GET already proven in phase 1:
   `/cgi-eddi-mode-E<serial>-1` to start, `-0` to stop.
 - A schedule stored in NVS: a stop time and a start time, entered on the
-  setup page as 24-hour values, defaulting to the Pi's current 09:00 and
-  22:00.
+  setup page as 24-hour values, defaulting to 12:00 and 22:00.
+
+  The stop default is deliberately noon rather than the Pi's 09:00. The
+  owner chose it when specifying this phase; the Pi's 09:00 is not a
+  constraint to preserve, just what happened to be in its crontab.
 - Verified mode changes. The Python controller issues a command, waits,
   polls, and retries up to five times, because the cloud accepts a
   command that the device can take 3 to 5 minutes to act on. The device
@@ -288,18 +291,36 @@ already polling every 30 seconds does not, so the late transition that
 the Pi reports as a failure is one the device would see and report
 correctly.
 
-### Open questions for phase 2
+### Decisions on the phase 2 open questions
 
-- Whether the hard-won 22:00 start time (21:00 and 21:30 both fail
-  consistently, per the controller's notes) should be a default or a
-  fixed floor.
-- What happens when the device reboots between a scheduled stop and the
-  next start. The water reminder floors to the most recent mark on boot;
-  the same approach would re-issue a missed command rather than skip it,
-  but re-issuing a stop that the owner has deliberately overridden from
-  the app would be wrong. This needs deciding before implementation.
-- Whether a failed command after all retries should keep retrying at the
-  poll interval or give up and say so.
+**A missed command is never re-issued after a reboot.** The device acts
+only when it observes the clock cross a scheduled time while running. It
+does not floor to the most recent mark the way the water reminder does.
+
+The two cases are not alike. A missed water reminder is a prompt nobody
+acted on, so firing it late costs nothing. A missed heater command is
+different, because the device cannot tell "this did not happen because I
+was powered off" from "this did not happen and the owner has since
+changed the mode from the app on purpose". Re-issuing would silently
+undo a deliberate choice, and the owner would have no way to know why
+their heater changed mode minutes after a power cut.
+
+The cost of this decision is that a reboot spanning a scheduled time
+loses that one action until the next edge. That is recoverable in one
+tap from the app. The alternative is not.
+
+**22:00 is a default, not a floor.** The controller's notes record 21:00
+and 21:30 failing verification on four dates in June while 22:00 worked,
+which is a good reason for the default and a poor reason for a hard
+limit. Four observations from one month should not become a rule the
+owner cannot override on their own hardware.
+
+**A command that fails every retry gives up and says so.** It is not
+re-attempted until the next scheduled edge, and the Telegram message
+distinguishes the three outcomes: commanded and confirmed, commanded but
+unconfirmed, and failed outright. Retrying indefinitely against an
+undocumented API whose own guidance warns about IP bans would risk
+losing the status polling as well as the command.
 
 ## Open items resolved during design
 
