@@ -4,6 +4,7 @@
 #include "schedule.h"
 #include "ticker.h"
 #include "chart.h"
+#include "notify.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -141,6 +142,7 @@ void setup() {
 
   tickerBegin();
   chartBegin();
+  notifyBegin();
 }
 
 void loop() {
