@@ -12,7 +12,9 @@ the desk or opening the myenergi app.
 
 This replaces nothing. The existing Raspberry Pi controller
 (`github.com/bguruprasad/myenergi-eddi-python-controller`) keeps issuing
-the scheduled start/stop commands. This device only observes.
+the scheduled start/stop commands. In this phase the device only
+observes; the phase 2 addendum below moves that schedule onto the
+device and retires the Pi.
 
 ## Why this is worth building
 
@@ -57,9 +59,9 @@ display, since the owner is usually away from the desk at that hour.
 
 ## Non-goals
 
-- **No control.** The device does not start, stop or boost the Eddi.
-  A mistap on a touchscreen must not be able to stop a water heater.
-  Control, if ever wanted, is a separate design with a confirm step.
+- **No control in this phase.** The device does not start, stop or boost
+  the Eddi. See the phase 2 addendum below, which supersedes the original
+  blanket ban.
 - No duplication of the Pi's own notifications. The Pi announces its
   commands; this device announces observed transitions. Running both is
   intended, and they say different things.
@@ -245,6 +247,60 @@ No new third-party libraries.
 - `HTTPClient`, `NetworkClientSecure`, `Preferences` (core, already used)
 - `ArduinoJson` 7.4.3 (already a dependency)
 
+## Addendum: phase 2, the device runs the schedule (2026-09-20)
+
+Phase 1 observes. Phase 2 gives the device the Raspberry Pi's job, so
+the Pi can be retired and one always-on board does both.
+
+### Correcting the Non-goals
+
+The original spec ruled out control outright, on the grounds that a
+mistap on a touchscreen must not be able to stop a water heater. That
+reasoning is about **touch**, and it still holds: no tap starts or stops
+the Eddi. It does not extend to a **scheduled** action, which has no tap
+in it and is the same kind of timer as the water reminder that already
+fires at 09:00 unattended. The blanket ban was too broad, and this
+addendum replaces it.
+
+### What phase 2 adds
+
+- Two commands, both the same Digest GET already proven in phase 1:
+  `/cgi-eddi-mode-E<serial>-1` to start, `-0` to stop.
+- A schedule stored in NVS: a stop time and a start time, entered on the
+  setup page as 24-hour values, defaulting to the Pi's current 09:00 and
+  22:00.
+- Verified mode changes. The Python controller issues a command, waits,
+  polls, and retries up to five times, because the cloud accepts a
+  command that the device can take 3 to 5 minutes to act on. The device
+  already polls every 30 seconds for the pill, so verification is nearly
+  free here: issue the command, then watch the status it is already
+  fetching, and re-issue if the state has not moved after a few minutes.
+- A Telegram message on the outcome, distinguishing "commanded" from
+  "confirmed" - which is precisely the distinction the Pi cannot make.
+
+### Why the device does this better than the Pi
+
+The controller's own notes record the 21:00 start failing verification
+after roughly eight minutes on four separate dates, while the Eddi had
+in fact started; it was discovered the next morning through the mobile
+app. The Pi stops watching when its cron job exits. A device that is
+already polling every 30 seconds does not, so the late transition that
+the Pi reports as a failure is one the device would see and report
+correctly.
+
+### Open questions for phase 2
+
+- Whether the hard-won 22:00 start time (21:00 and 21:30 both fail
+  consistently, per the controller's notes) should be a default or a
+  fixed floor.
+- What happens when the device reboots between a scheduled stop and the
+  next start. The water reminder floors to the most recent mark on boot;
+  the same approach would re-issue a missed command rather than skip it,
+  but re-issuing a stop that the owner has deliberately overridden from
+  the app would be wrong. This needs deciding before implementation.
+- Whether a failed command after all retries should keep retrying at the
+  poll interval or give up and say so.
+
 ## Open items resolved during design
 
 - Status display: the status word, colour-coded, not a boolean.
@@ -252,5 +308,8 @@ No new third-party libraries.
 - Both status and weekday abbreviated, to fit 240px at the worst case.
 - Telegram: observed transitions only, not parity with the Pi's
   command announcements, and not omitted.
-- Control: explicitly out of scope; this device only observes.
+- Control: out of scope for phase 1, and revisited in the phase 2
+  addendum. The original reasoning banned control outright to keep a
+  mistap from stopping a water heater; that argument is about touch and
+  does not reach a scheduled action.
 - Poll interval: 30s, inside the 1-per-10s guidance.
