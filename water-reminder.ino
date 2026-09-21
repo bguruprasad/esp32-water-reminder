@@ -44,6 +44,21 @@ static unsigned long lastPanelPageMs = 0;
 static int panelPair = 0;
 static bool panelsVisible = false;
 
+// Which chart the panels draw. Flips each time the pairs wrap back to
+// the first, so a full pass of all eight symbols is shown as day lines,
+// then the same eight as 30-minute candles, alternating every 20s.
+//
+// Both views earn their place: the line answers "how has it done today",
+// the candles answer "what is it doing right now", and neither is
+// readable at the other's zoom. A day of candles leaves a typical body
+// under 1.5px on this panel; 30 minutes of line loses the day's shape.
+static ChartMode panelMode = CHART_30MIN_CANDLES;
+
+// The setup page's preference, read once at boot: 0 alternate,
+// 1 candles only, 2 line only. When it pins one view, panelMode stops
+// flipping and chartPump() stops fetching the series nobody draws.
+static int chartPref = 1;
+
 static AlertFlashColor nextAlertColor(AlertFlashColor c) {
   switch (c) {
     case ALERT_RED:   return ALERT_AMBER;
@@ -144,6 +159,9 @@ void setup() {
 
   tickerBegin();
   chartBegin();
+  chartPref = wifiSetupChartMode();
+  if (chartPref == 1) panelMode = CHART_30MIN_CANDLES;
+  else if (chartPref == 2) panelMode = CHART_DAY_LINE;
   notifyBegin();
   eddiBegin();
   eddiScheduleBegin();
@@ -177,16 +195,23 @@ void loop() {
       // First paint, or returning from an alert that wiped the screen:
       // draw immediately rather than waiting out a full dwell blank.
       lastPanelPageMs = millis();
-      uiDrawChartPanel(tft, 0, panelPair * 2);
-      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
+      uiDrawChartPanel(tft, 0, panelPair * 2, panelMode);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1, panelMode);
       panelsVisible = true;
     } else if (millis() - lastPanelPageMs >= PANEL_PAGE_MS) {
       // Dwell elapsed: advance to the next pair. This is the ONLY place
       // the panels are repainted during steady state.
       lastPanelPageMs = millis();
       panelPair = (panelPair + 1) % pairCount;
-      uiDrawChartPanel(tft, 0, panelPair * 2);
-      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
+      // Wrapping to the first pair means a full pass finished, so switch
+      // which chart the next pass shows. Only when the setup page asked
+      // for both; either fixed choice leaves panelMode where boot put it.
+      if (panelPair == 0 && chartPref == 0) {
+        panelMode = (panelMode == CHART_DAY_LINE) ? CHART_30MIN_CANDLES
+                                                  : CHART_DAY_LINE;
+      }
+      uiDrawChartPanel(tft, 0, panelPair * 2, panelMode);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1, panelMode);
     }
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&

@@ -36,4 +36,12 @@ String wifiSetupTgChat();
 int wifiSetupEddiStopMin();
 int wifiSetupEddiStartMin();
 
+// Which chart the price panels draw.
+//   0 alternate, a full pass of day lines then a full pass of candles
+//   1 candles only, the last 30 minutes at 1 minute resolution
+//   2 line only, the whole session at 15 minute resolution
+// Defaults to 1. Anything unrecognised in storage also reads as 1, so a
+// device that has never seen the setup page shows candles.
+int wifiSetupChartMode();
+
 #endif

@@ -15,6 +15,7 @@ static const char *NVS_KEY_TGTOKEN = "tgtoken";
 static const char *NVS_KEY_TGCHAT = "tgchat";
 static const char *NVS_KEY_EDSTOP = "edstop";
 static const char *NVS_KEY_EDSTART = "edstart";
+static const char *NVS_KEY_CHARTMODE = "chartmode";
 
 // Defaults if nothing is stored: stop at noon, start at 22:00.
 //
@@ -78,6 +79,7 @@ static String submittedTgToken;
 static String submittedTgChat;
 static String submittedEdStop;
 static String submittedEdStart;
+static String submittedChartMode;
 
 // Escapes a stored value for use inside a double-quoted HTML attribute.
 // An SSID is user-supplied text that can legitimately contain quotes or
@@ -162,6 +164,25 @@ static String buildFormHtml() {
   h += "<small>Local time, every day. A scheduled time that passes while "
        "the device is off is skipped, not caught up.</small><br><br>";
 
+  // Stored as a word rather than a number, so a stale or hand-edited
+  // value reads as the default instead of silently selecting something.
+  {
+    String cm = readSetting(NVS_KEY_CHARTMODE);
+    h += "<hr>Price chart:<br><select name='chartmode'>";
+    h += "<option value='candle'";
+    if (cm != "alt" && cm != "line") h += " selected";
+    h += ">Candles only (last 30 min)</option>";
+    h += "<option value='alt'";
+    if (cm == "alt") h += " selected";
+    h += ">Alternate line and candles</option>";
+    h += "<option value='line'";
+    if (cm == "line") h += " selected";
+    h += ">Line only (whole day)</option>";
+    h += "</select><br>";
+    h += "<small>One view halves the data fetched, so it refreshes every "
+         "2 minutes instead of 4.</small><br><br>";
+  }
+
   h += "<input type='submit' value='Save and Connect'>"
        "</form></body></html>";
   return h;
@@ -196,6 +217,13 @@ static void handleSave() {
   submittedEdStart = minutesToHhMm(
     hhMmToMinutes(webServer.arg("edstart"),
                   readTimeSetting(NVS_KEY_EDSTART, EDDI_DEFAULT_START_MIN)));
+
+  // Only the three known words are accepted; anything else stores the
+  // default rather than a value no reader understands.
+  {
+    String cm = webServer.arg("chartmode");
+    submittedChartMode = (cm == "alt" || cm == "line") ? cm : String("candle");
+  }
 
   // Secret fields come back blank unless deliberately retyped.
   submittedPass = keepIfBlank(webServer.arg("pass"), NVS_KEY_PASS);
@@ -281,6 +309,7 @@ void wifiSetupStartPortal() {
       prefs.putString(NVS_KEY_TGCHAT, submittedTgChat);
       prefs.putString(NVS_KEY_EDSTOP, submittedEdStop);
       prefs.putString(NVS_KEY_EDSTART, submittedEdStart);
+      prefs.putString(NVS_KEY_CHARTMODE, submittedChartMode);
       prefs.end();
       delay(500);
       ESP.restart();
@@ -314,4 +343,11 @@ int wifiSetupEddiStopMin() {
 
 int wifiSetupEddiStartMin() {
   return readTimeSetting(NVS_KEY_EDSTART, EDDI_DEFAULT_START_MIN);
+}
+
+int wifiSetupChartMode() {
+  String cm = readSetting(NVS_KEY_CHARTMODE);
+  if (cm == "alt") return 0;
+  if (cm == "line") return 2;
+  return 1; // candles, the default and the fallback for anything unknown
 }

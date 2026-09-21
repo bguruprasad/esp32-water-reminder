@@ -364,7 +364,7 @@ static int chartY(float v, float lo, float hi, int top, int h) {
   return top + pad + (int)(t * (h - pad * 2));
 }
 
-void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex) {
+void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex, ChartMode mode) {
   if (slot < 0 || slot > 1) return;
   const int top = PANEL_TOP[slot];
   tft.fillRect(0, top, TFT_HRES, PANEL_H, TFT_BLACK);
@@ -406,21 +406,64 @@ void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex) {
   tft.setFreeFont(NULL);
   tft.setTextDatum(MC_DATUM);
 
-  // Chart.
+  const int cTop = top + PANEL_CHART_DY;
+
+  // Dashed horizontal reference, drawn first so the series sits over it.
+  // Both modes have one, but they mean different things: the day's
+  // previous close, or the opening price of the 30 minute window.
+  auto dashedAt = [&](float value, float lo, float hi) {
+    int ry = chartY(value, lo, hi, cTop, PANEL_CHART_H);
+    for (int x = 0; x < TFT_HRES; x += 7) {
+      tft.drawFastHLine(x, ry, 3, TFT_DARKGREY);
+    }
+  };
+
+  if (mode == CHART_30MIN_CANDLES) {
+    float lo, hi, winOpen;
+    int n = chartCandleCount(symbolIndex);
+    if (n < 2 || !chartCandleRange(symbolIndex, lo, hi)) return;
+
+    if (chartCandleOpen(symbolIndex, winOpen)) dashedAt(winOpen, lo, hi);
+
+    // 240px across 30 candles is an 8px slot: a 6px body with a 2px gap,
+    // and a 1px wick down the middle. The slot is computed from n rather
+    // than assumed, since a partial window early in a session gives
+    // fewer candles and correspondingly wider slots.
+    const int slot = TFT_HRES / n;
+    const int bodyW = slot > 3 ? slot - 2 : 1;
+
+    float o, h, l, c;
+    for (int i = 0; i < n; i++) {
+      if (!chartCandle(symbolIndex, i, o, h, l, c)) continue;
+      const int xLeft = i * slot;
+      const int xMid = xLeft + slot / 2;
+      const uint16_t col = (c >= o) ? TFT_GREEN : TFT_RED;
+
+      // Wick first, so the body paints over its middle section.
+      tft.drawFastVLine(xMid, chartY(h, lo, hi, cTop, PANEL_CHART_H),
+                        chartY(l, lo, hi, cTop, PANEL_CHART_H) -
+                        chartY(h, lo, hi, cTop, PANEL_CHART_H) + 1, col);
+
+      int yo = chartY(o, lo, hi, cTop, PANEL_CHART_H);
+      int yc = chartY(c, lo, hi, cTop, PANEL_CHART_H);
+      int yTop = yo < yc ? yo : yc;
+      int bodyH = (yo < yc ? yc - yo : yo - yc) + 1;
+
+      // A minute that opened and closed at the same price has no body.
+      // Forcing a single row keeps it visible as a doji rather than
+      // letting a flat minute disappear into the wick.
+      if (bodyH < 1) bodyH = 1;
+      tft.fillRect(xLeft + 1, yTop, bodyW, bodyH, col);
+    }
+    return;
+  }
+
+  // CHART_DAY_LINE
   float lo, hi, prevClose;
   int n = chartPointCount(symbolIndex);
   if (n < 2 || !chartRange(symbolIndex, lo, hi, prevClose)) return;
 
-  const int cTop = top + PANEL_CHART_DY;
-
-  // Dashed reference line at the previous close, so points above it are
-  // up on the day. Drawn first so the series sits over it.
-  if (prevClose > 0) {
-    int ry = chartY(prevClose, lo, hi, cTop, PANEL_CHART_H);
-    for (int x = 0; x < TFT_HRES; x += 7) {
-      tft.drawFastHLine(x, ry, 3, TFT_DARKGREY);
-    }
-  }
+  if (prevClose > 0) dashedAt(prevClose, lo, hi);
 
   uint16_t lineCol = TFT_GREEN;
   float lastClose;
