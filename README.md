@@ -112,9 +112,36 @@ The device polls every 30 seconds. Community guidance for this API is at
 most one request per 10 seconds, with a stated risk of a temporary IP
 ban, so this sits well inside it.
 
-This device only observes. It does not start, stop or boost the Eddi;
-that stays with the Raspberry Pi controller at
-`github.com/bguruprasad/myenergi-eddi-python-controller`.
+## Eddi schedule
+
+The device stops the Eddi at 12:00 and starts it at 22:00 every day.
+Both times are set on the setup page and stored on the device; they are
+not compiled in.
+
+After issuing a command it watches the status it already polls, and
+re-issues up to five times, two minutes apart, before giving up. This
+is not belt and braces: the myenergi cloud accepts a command
+immediately while the physical device can take 3 to 5 minutes to act,
+reporting the old status throughout. A Telegram message reports which
+of three things happened - confirmed, rejected outright, or not
+confirmed after every attempt.
+
+**A scheduled time that passes while the device is off is skipped, not
+caught up.** If it is unplugged over 12:00 and comes back at 12:30, it
+does nothing until 22:00. The device sees the Eddi's current mode but
+never the reason for it, so it cannot tell a command missed during a
+power cut from one the owner deliberately overrode from the app. The
+cost of skipping is one cycle, recoverable with a tap; the cost of
+catching up is silently undoing a deliberate choice.
+
+Boosting is not supported, and no schedule can be set from the
+touchscreen. A mistap must not be able to change what a water heater
+is doing.
+
+This overlaps with the Raspberry Pi controller at
+`github.com/bguruprasad/myenergi-eddi-python-controller`. Run both for
+a few days before retiring the Pi: two independent systems reporting
+the same events is the cheapest confirmation that they agree.
 
 ## Reaching the setup page
 
@@ -155,4 +182,5 @@ end-to-end testing. Keep this commented out for normal use.
 
 - No audible beep - no speaker/buzzer hardware attached yet.
 - No persistent history of dismissed reminders.
-- No remote control or mobile app.
+- No remote control of the device itself, and no mobile app. It runs its
+  own schedules; nothing outside it can drive it except the setup page.
