@@ -139,6 +139,21 @@ static String digestGet(const String &host, const String &uri,
   return body;
 }
 
+bool eddiSendMode(bool start) {
+  if (serial_.length() == 0 || key_.length() == 0) return false;
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  // Requires a server, which eddiPump() discovers on its first poll.
+  // Refusing here rather than discovering inline keeps commands off the
+  // slow two-exchange path and means a command never runs before the
+  // status polling has proved the credentials work.
+  if (host_.length() == 0) return false;
+
+  String uri = "/cgi-eddi-mode-E" + serial_ + (start ? "-1" : "-0");
+  String body = digestGet(host_, uri, nullptr);
+  return body.length() > 0;
+}
+
 void eddiPump() {
   if (serial_.length() == 0 || key_.length() == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;

@@ -39,4 +39,16 @@ uint16_t eddiStatusColor(int sta);
 // repaints only when there is something new to show.
 bool eddiChanged();
 
+// Issues a mode change: true starts the Eddi (normal mode), false stops
+// it. Returns whether the API ACCEPTED the command.
+//
+// Accepted is not the same as done, and the difference matters here.
+// The myenergi cloud answers 200 immediately while the physical device
+// can take 3 to 5 minutes to act, reporting the old status throughout.
+// The controller this replaces logged four occasions where it declared
+// a start failed after roughly eight minutes when the Eddi had in fact
+// started. Anything that needs to know the heater actually moved must
+// watch eddiStatus() afterwards rather than trust this return value.
+bool eddiSendMode(bool start);
+
 #endif
