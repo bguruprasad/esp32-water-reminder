@@ -30,4 +30,10 @@ String wifiSetupEddiKey();
 String wifiSetupTgToken();
 String wifiSetupTgChat();
 
+// The Eddi schedule, as minutes since midnight in local time (0-1439).
+// Default to 12:00 and 22:00 when nothing is stored, so the device has a
+// usable schedule before anyone visits the setup page.
+int wifiSetupEddiStopMin();
+int wifiSetupEddiStartMin();
+
 #endif

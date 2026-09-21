@@ -13,6 +13,18 @@ static const char *NVS_KEY_EDDISN = "eddisn";
 static const char *NVS_KEY_EDDIKEY = "eddikey";
 static const char *NVS_KEY_TGTOKEN = "tgtoken";
 static const char *NVS_KEY_TGCHAT = "tgchat";
+static const char *NVS_KEY_EDSTOP = "edstop";
+static const char *NVS_KEY_EDSTART = "edstart";
+
+// Defaults if nothing is stored: stop at noon, start at 22:00.
+//
+// Noon rather than the Pi controller's 09:00 because that is what was
+// asked for; the Pi's time was not a constraint to preserve, just what
+// happened to be in its crontab. 22:00 is the Pi's start time and is
+// kept, since its notes record 21:00 and 21:30 both failing to take
+// effect while 22:00 worked reliably.
+static const int EDDI_DEFAULT_STOP_MIN = 12 * 60;
+static const int EDDI_DEFAULT_START_MIN = 22 * 60;
 
 // Reads one saved string from NVS. All the credential getters are the
 // same three lines around a different key, so they share this rather
@@ -23,6 +35,32 @@ static String readSetting(const char *key) {
   String value = prefs.getString(key, "");
   prefs.end();
   return value;
+}
+
+// Minutes since midnight as "HH:MM", the format an <input type=time>
+// both expects and posts back.
+static String minutesToHhMm(int mins) {
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%02d:%02d", mins / 60, mins % 60);
+  return String(buf);
+}
+
+// "HH:MM" back to minutes since midnight, returning fallback on anything
+// malformed. A browser without native time input support can post free
+// text here, and a half-typed value must not be able to leave the
+// schedule in an undefined state.
+static int hhMmToMinutes(const String &s, int fallback) {
+  if (s.length() < 5 || s.charAt(2) != ':') return fallback;
+  int h = s.substring(0, 2).toInt();
+  int m = s.substring(3, 5).toInt();
+  if (h < 0 || h > 23 || m < 0 || m > 59) return fallback;
+  return h * 60 + m;
+}
+
+// Reads a stored "HH:MM" as minutes, falling back to the default when
+// unset or unparseable.
+static int readTimeSetting(const char *key, int fallback) {
+  return hhMmToMinutes(readSetting(key), fallback);
 }
 
 static const char *AP_SSID = "WaterReminder-Setup";
@@ -38,6 +76,8 @@ static String submittedEddiSn;
 static String submittedEddiKey;
 static String submittedTgToken;
 static String submittedTgChat;
+static String submittedEdStop;
+static String submittedEdStart;
 
 // Escapes a stored value for use inside a double-quoted HTML attribute.
 // An SSID is user-supplied text that can legitimately contain quotes or
@@ -111,6 +151,17 @@ static String buildFormHtml() {
                   readSetting(NVS_KEY_TGCHAT));
   h += "<small>Both needed for Eddi status alerts.</small><br><br>";
 
+  // type=time gives a native picker on a phone and posts "HH:MM".
+  h += "<hr>Eddi schedule:<br>";
+  h += "Stop at:<br><input name='edstop' type='time' value=\"" +
+       minutesToHhMm(readTimeSetting(NVS_KEY_EDSTOP, EDDI_DEFAULT_STOP_MIN)) +
+       "\"><br>";
+  h += "Start at:<br><input name='edstart' type='time' value=\"" +
+       minutesToHhMm(readTimeSetting(NVS_KEY_EDSTART, EDDI_DEFAULT_START_MIN)) +
+       "\"><br>";
+  h += "<small>Local time, every day. A scheduled time that passes while "
+       "the device is off is skipped, not caught up.</small><br><br>";
+
   h += "<input type='submit' value='Save and Connect'>"
        "</form></body></html>";
   return h;
@@ -135,6 +186,16 @@ static void handleSave() {
   submittedSsid = webServer.arg("ssid");
   submittedEddiSn = webServer.arg("eddisn");
   submittedTgChat = webServer.arg("tgchat");
+
+  // Normalised through the parser before storage, so what lands in NVS
+  // is always a valid "HH:MM" and readers never have to defend against
+  // whatever the browser happened to post.
+  submittedEdStop = minutesToHhMm(
+    hhMmToMinutes(webServer.arg("edstop"),
+                  readTimeSetting(NVS_KEY_EDSTOP, EDDI_DEFAULT_STOP_MIN)));
+  submittedEdStart = minutesToHhMm(
+    hhMmToMinutes(webServer.arg("edstart"),
+                  readTimeSetting(NVS_KEY_EDSTART, EDDI_DEFAULT_START_MIN)));
 
   // Secret fields come back blank unless deliberately retyped.
   submittedPass = keepIfBlank(webServer.arg("pass"), NVS_KEY_PASS);
@@ -218,6 +279,8 @@ void wifiSetupStartPortal() {
       prefs.putString(NVS_KEY_EDDIKEY, submittedEddiKey);
       prefs.putString(NVS_KEY_TGTOKEN, submittedTgToken);
       prefs.putString(NVS_KEY_TGCHAT, submittedTgChat);
+      prefs.putString(NVS_KEY_EDSTOP, submittedEdStop);
+      prefs.putString(NVS_KEY_EDSTART, submittedEdStart);
       prefs.end();
       delay(500);
       ESP.restart();
@@ -243,4 +306,12 @@ String wifiSetupTgToken() {
 
 String wifiSetupTgChat() {
   return readSetting(NVS_KEY_TGCHAT);
+}
+
+int wifiSetupEddiStopMin() {
+  return readTimeSetting(NVS_KEY_EDSTOP, EDDI_DEFAULT_STOP_MIN);
+}
+
+int wifiSetupEddiStartMin() {
+  return readTimeSetting(NVS_KEY_EDSTART, EDDI_DEFAULT_START_MIN);
 }
