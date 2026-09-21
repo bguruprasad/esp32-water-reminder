@@ -1,6 +1,5 @@
 #include "eddi.h"
 #include "wifi_setup.h"
-#include "notify.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>
@@ -21,8 +20,6 @@ static const char *FALLBACK_HOST = "s18.myenergi.net";
 
 static String serial_, key_, host_;
 static int status_ = EDDI_UNKNOWN;
-static int lastNotified_ = EDDI_UNKNOWN;
-static bool firstFetchDone_ = false;
 static bool changed_ = false;
 static unsigned long lastPollAtMs = 0;
 
@@ -187,26 +184,21 @@ void eddiPump() {
     changed_ = true;
   }
 
-  // Notify only on a real observed transition between two known states.
+  // Observed transitions are deliberately NOT announced.
   //
-  // Two cases are deliberately silent. The first successful fetch after
-  // boot has nothing to compare against, so without this every power cut
-  // would announce itself. And a transition out of EDDI_UNKNOWN means the
-  // device has just regained contact, not that the heater did anything:
-  // treating a network blip as an Eddi event would produce a false alert
-  // on every outage.
-  bool suppress = !firstFetchDone_ || lastNotified_ == EDDI_UNKNOWN;
-  firstFetchDone_ = true;
-
-  if (!suppress && sta != lastNotified_) {
-    struct tm lt;
-    time_t now = time(nullptr);
-    localtime_r(&now, &lt);
-    char buf[96];
-    snprintf(buf, sizeof(buf), "Eddi: %s -> %s at %02d:%02d",
-             eddiStatusText(lastNotified_), eddiStatusText(sta),
-             lt.tm_hour, lt.tm_min);
-    notifySend(String(buf));
-  }
-  lastNotified_ = sta;
+  // This used to send a message on every status change, which made a
+  // single scheduled stop arrive as two notifications: this one, then
+  // the scheduler's own confirmation of the same event. It also fired
+  // for every change made from the myenergi app, and for the heater
+  // moving between Paused and Diverting on its own as surplus comes and
+  // goes, which on a sunny day is not a rare event.
+  //
+  // The scheduler still reports what it did, which is the part worth
+  // knowing about: two messages a day rather than a running commentary.
+  // The pill shows the live state for anyone who wants to look.
+  //
+  // The polling itself stays. It is what the pill displays, and it is
+  // what lets a command be confirmed rather than merely sent - the gap
+  // that made the Pi controller report a start as failed four times
+  // when the Eddi had actually started.
 }
