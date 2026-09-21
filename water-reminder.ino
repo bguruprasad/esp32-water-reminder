@@ -6,6 +6,7 @@
 #include "chart.h"
 #include "notify.h"
 #include "eddi.h"
+#include "eddi_schedule.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -145,6 +146,7 @@ void setup() {
   chartBegin();
   notifyBegin();
   eddiBegin();
+  eddiScheduleBegin();
 }
 
 void loop() {
@@ -162,6 +164,7 @@ void loop() {
     tickerPump(); // prices, Finnhub, market hours only (checked internally)
     chartPump();  // candles, Yahoo, at most one symbol per 30s
     eddiPump();   // Eddi status, myenergi, at most once per 30s
+    eddiSchedulePump(nowLocal); // stop/start at the scheduled times
 
     // No market-hours gate here: Yahoo keeps serving the last session, so
     // there is always a chart worth showing. Only price fetching pauses.
