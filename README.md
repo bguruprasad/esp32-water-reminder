@@ -84,14 +84,16 @@ the left, the weekday on the right, both in the same colour.
 | Stopped | square | grey | off |
 | Unknown | hollow square | dim grey | no reading yet, or unreachable |
 
-When the status changes, a Telegram message names the transition and the
-time, for example `Eddi: Stopped -> Diverting at 22:04`.
+Status changes are shown on the pill but not sent anywhere. Only the
+scheduler sends Telegram messages, and only about what it did: see the
+Eddi schedule section below.
 
-Two cases deliberately send nothing. The first reading after boot has
-nothing to compare against, so without this every power cut would
-announce itself. And a change into or out of the unknown state means
-contact was lost or regained, not that the heater did anything, so a
-WiFi blip does not produce a pair of false alerts.
+An earlier version announced every observed transition, which turned out
+to be a running commentary rather than a notification. A single
+scheduled stop arrived twice, once as the transition and once as the
+scheduler's confirmation of the same event, and the heater drifting
+between Paused and Diverting on its own as surplus comes and goes is
+frequent on a sunny day.
 
 Credentials go in the device's setup page, never in this repository: the
 myenergi hub serial (the HTTP Digest username), the myenergi API key
