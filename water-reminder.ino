@@ -182,7 +182,13 @@ void loop() {
     tickerPump(); // prices, Finnhub, market hours only (checked internally)
     chartPump();  // candles, Yahoo, at most one symbol per 30s
     eddiPump();   // Eddi status, myenergi, at most once per 30s
-    eddiSchedulePump(nowLocal); // stop/start at the scheduled times
+    // Gated on a synced clock, like the water reminder below. Without
+    // this the scheduler acted on whatever the clock said, including the
+    // 1970 epoch left behind when an NTP sync fails at boot, and the
+    // jump when a later sync corrects it.
+    if (timeSyncIsValid()) {
+      eddiSchedulePump(nowLocal); // stop/start at the scheduled times
+    }
 
     // No market-hours gate here: Yahoo keeps serving the last session, so
     // there is always a chart worth showing. Only price fetching pauses.

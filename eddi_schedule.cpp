@@ -19,6 +19,10 @@ static bool verifyActive = false;
 static bool wantStart = false;
 static int attempt = 0;
 static unsigned long lastAttemptMs = 0;
+// The status as it was when the command went out, so a start can be
+// confirmed by a real transition rather than by a state that was
+// already true before anything was sent.
+static int staBefore = EDDI_UNKNOWN;
 
 void eddiScheduleBegin() {
   lastMinuteOfDay = -1;
@@ -31,11 +35,39 @@ static String hhMm(const struct tm &t) {
   return String(buf);
 }
 
-// True if target lies in (prev, now]. Handles the midnight wrap, where
-// now is numerically smaller than prev.
+// The largest gap between two observations still treated as the clock
+// simply ticking. A fetch can stall the loop for 5 seconds and an alert
+// holds it for 30, so a few minutes is generous; beyond that it is a
+// stall or a clock correction, not time passing under observation.
+static const int MAX_GAP_MINUTES = 5;
+
+// True if target lies in (prev, now], where now is the FIRST observation
+// after prev and the two are close enough together to be consecutive.
+//
+// The gap bound is the whole point of this function, and its absence
+// fired a scheduled 12:00 stop at 01:12. The old version treated any
+// prev > now as "midnight was crossed" and then counted every target
+// above prev, so a jump from 11:40 to 01:12 - a stall, a reconnect, or
+// an NTP correction - was indistinguishable from a one-minute tick past
+// midnight, and swept up the 12:00 target on the way through.
+//
+// Refusing a crossing across a large gap is the same rule the rest of
+// the scheduler follows: a scheduled time the device did not actually
+// observe passing is skipped, never caught up, because it cannot tell a
+// command missed while it was away from one the owner has since
+// deliberately overridden.
 static bool crossed(int prev, int now, int target) {
   if (prev == now) return false;
-  if (prev < now) return target > prev && target <= now;
+
+  if (prev < now) {
+    if (now - prev > MAX_GAP_MINUTES) return false;
+    return target > prev && target <= now;
+  }
+
+  // now < prev: either a real midnight wrap, or the clock moved by
+  // hours. Only the former is a tick.
+  const int wrapGap = (1440 - prev) + now;
+  if (wrapGap > MAX_GAP_MINUTES) return false;
   return target > prev || target <= now;
 }
 
@@ -47,6 +79,7 @@ static void beginCommand(bool start, const struct tm &nowLocal) {
   verifyActive = true;
   attempt = 1;
   lastAttemptMs = millis();
+  staBefore = eddiStatus();
 
   bool accepted = eddiSendMode(start);
   if (!accepted) {
@@ -68,10 +101,40 @@ static void pumpVerify(const struct tm &nowLocal) {
   int sta = eddiStatus();
 
   // Unknown means the poll itself is failing, which says nothing about
-  // whether the heater moved. Wait rather than count it as a failure.
-  if (sta == EDDI_UNKNOWN) { lastAttemptMs = millis(); return; }
+  // whether the heater moved. Waiting is right, but the attempt still
+  // has to count: without it, give-up was unreachable, verifyActive
+  // stuck true forever, and because eddiSchedulePump() will not start a
+  // command while one is in flight, a sustained API outage silently
+  // blocked every future stop and start until the device was rebooted.
+  if (sta == EDDI_UNKNOWN) {
+    lastAttemptMs = millis();
+    if (++attempt > VERIFY_ATTEMPTS) {
+      verifyActive = false;
+      notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
+                 " could not be checked at " + hhMm(nowLocal) +
+                 ". The status has been unreachable throughout. Check the app.");
+    }
+    return;
+  }
 
-  bool reached = wantStart ? (sta != 6) : (sta == 6);
+  // A start is confirmed by an actual transition out of Stopped, not by
+  // the mere absence of Stopped. The Eddi is usually Paused, which is
+  // already "not 6", so the old check self-confirmed against whatever
+  // the status happened to be and would have reported success even if
+  // the command had been dropped entirely.
+  bool reached = wantStart ? (staBefore == 6 && sta != 6) : (sta == 6);
+
+  // Nothing to transition from: a start commanded while already running,
+  // or a stop while already stopped. The command was still sent, but no
+  // change can prove it landed, so say that rather than claim success.
+  bool alreadyThere = wantStart ? (staBefore != 6) : (staBefore == 6);
+  if (alreadyThere) {
+    verifyActive = false;
+    notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
+               " sent at " + hhMm(nowLocal) + ", but it was already " +
+               eddiStatusText(staBefore) + " so there was nothing to confirm.");
+    return;
+  }
   if (reached) {
     verifyActive = false;
     notifySend(String("Eddi: ") + (wantStart ? "started" : "stopped") +

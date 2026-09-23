@@ -202,11 +202,16 @@ static String keepIfBlank(const String &submitted, const char *nvsKey) {
 }
 
 static void handleSave() {
-  // Plain fields are prefilled in the form, so what comes back is
-  // already the full intended value and replaces the stored one.
-  submittedSsid = webServer.arg("ssid");
-  submittedEddiSn = webServer.arg("eddisn");
-  submittedTgChat = webServer.arg("tgchat");
+  // Plain fields are prefilled, so what comes back is normally the full
+  // intended value. Blank still means keep: a browser that fails to
+  // render a field, or a form submitted from a stale cached page, would
+  // otherwise wipe the hub serial and take the pill and the entire
+  // schedule down with it, silently and with nothing on screen to say
+  // why. Clearing one of these deliberately is not a thing anyone needs
+  // to do from this page.
+  submittedSsid = keepIfBlank(webServer.arg("ssid"), NVS_KEY_SSID);
+  submittedEddiSn = keepIfBlank(webServer.arg("eddisn"), NVS_KEY_EDDISN);
+  submittedTgChat = keepIfBlank(webServer.arg("tgchat"), NVS_KEY_TGCHAT);
 
   // Normalised through the parser before storage, so what lands in NVS
   // is always a valid "HH:MM" and readers never have to defend against
