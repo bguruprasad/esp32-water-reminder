@@ -30,15 +30,23 @@ enum AlertFlashColor { ALERT_RED, ALERT_AMBER, ALERT_GREEN };
 // timeout) - this just paints one frame per call.
 void uiDrawAlertScreen(TFT_eSPI &tft, AlertFlashColor color);
 
+// Which chart a panel draws below its price line.
+//
+// CHART_DAY_LINE is the whole session as a line, with a dashed marker at
+// the previous close. CHART_30MIN_CANDLES is the last 30 minutes as
+// candles, with the dashed marker at the window's opening price - the
+// previous close sits far off-panel at that zoom and means nothing.
+enum ChartMode { CHART_DAY_LINE, CHART_30MIN_CANDLES };
+
 // Renders one symbol panel: the symbol and percent change on one line,
-// the price below, then a line chart of the day. slot 0 is the upper
+// the price below, then the chart named by mode. slot 0 is the upper
 // panel, slot 1 the lower. Repaints only that panel's own strip, so it
 // never disturbs the clock above it.
 //
 // Call this only when the displayed pair actually changes, not every
 // tick. Repainting on every frame is what made the old scrolling band
 // flicker.
-void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex);
+void uiDrawChartPanel(TFT_eSPI &tft, int slot, int symbolIndex, ChartMode mode);
 
 // Blanks both panel strips and the divider between them.
 void uiClearChartPanels(TFT_eSPI &tft);

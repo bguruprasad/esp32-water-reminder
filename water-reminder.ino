@@ -4,6 +4,9 @@
 #include "schedule.h"
 #include "ticker.h"
 #include "chart.h"
+#include "notify.h"
+#include "eddi.h"
+#include "eddi_schedule.h"
 #include "ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
@@ -40,6 +43,21 @@ static const unsigned long PANEL_PAGE_MS = 5000;
 static unsigned long lastPanelPageMs = 0;
 static int panelPair = 0;
 static bool panelsVisible = false;
+
+// Which chart the panels draw. Flips each time the pairs wrap back to
+// the first, so a full pass of all eight symbols is shown as day lines,
+// then the same eight as 30-minute candles, alternating every 20s.
+//
+// Both views earn their place: the line answers "how has it done today",
+// the candles answer "what is it doing right now", and neither is
+// readable at the other's zoom. A day of candles leaves a typical body
+// under 1.5px on this panel; 30 minutes of line loses the day's shape.
+static ChartMode panelMode = CHART_30MIN_CANDLES;
+
+// The setup page's preference, read once at boot: 0 alternate,
+// 1 candles only, 2 line only. When it pins one view, panelMode stops
+// flipping and chartPump() stops fetching the series nobody draws.
+static int chartPref = 1;
 
 static AlertFlashColor nextAlertColor(AlertFlashColor c) {
   switch (c) {
@@ -79,9 +97,46 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  // Touch the screen during the window below to reach the setup portal
+  // even when the saved WiFi credentials are perfectly good. Without
+  // this the portal is only reachable by making the connection fail,
+  // which means switching off a router or carrying the device out of
+  // range just to change a setting.
+  //
+  // A single touch ANY TIME in the window, rather than a touch already
+  // held at the instant of boot: the ESP32 is ready in well under a
+  // second, so a hold-at-boot gesture demands a finger already on the
+  // glass before the USB plug is seated. That is not a gesture a person
+  // can reliably perform.
+  //
+  // It still requires a PHYSICAL TOUCH, which is the whole safety
+  // property: the portal ends in ESP.restart(), so anything that forced
+  // it automatically would re-trigger on that reboot and loop forever.
+  // A finger cannot press itself during an unattended restart, so this
+  // cannot strand the device the way an unconditional force would.
+  bool reconfigure = false;
+  {
+    const unsigned long WINDOW_MS = 8000;
+    unsigned long start = millis();
+    int lastShown = -1;
+    while (millis() - start < WINDOW_MS) {
+      if (touch.Pressed()) { reconfigure = true; break; }
+      int remaining = (int)((WINDOW_MS - (millis() - start) + 999) / 1000);
+      if (remaining != lastShown) { // repaint only when the digit changes
+        lastShown = remaining;
+        tft.fillRect(0, TFT_VRES / 2 - 24, TFT_HRES, 48, TFT_BLACK);
+        tft.drawString("Touch for setup", TFT_HRES / 2, TFT_VRES / 2 - 10, 2);
+        tft.drawString(String(remaining), TFT_HRES / 2, TFT_VRES / 2 + 12, 2);
+      }
+      delay(20);
+    }
+  }
+
+  tft.fillScreen(TFT_BLACK);
   tft.drawString("Connecting to WiFi...", TFT_HRES / 2, TFT_VRES / 2, 2);
 
-  if (!wifiSetupConnect()) {
+  if (reconfigure || !wifiSetupConnect()) {
     tft.fillScreen(TFT_BLACK);
     tft.drawString("Join 'WaterReminder-Setup'", TFT_HRES / 2, TFT_VRES / 2 - 10, 2);
     tft.drawString("WiFi to configure", TFT_HRES / 2, TFT_VRES / 2 + 10, 2);
@@ -104,6 +159,12 @@ void setup() {
 
   tickerBegin();
   chartBegin();
+  chartPref = wifiSetupChartMode();
+  if (chartPref == 1) panelMode = CHART_30MIN_CANDLES;
+  else if (chartPref == 2) panelMode = CHART_DAY_LINE;
+  notifyBegin();
+  eddiBegin();
+  eddiScheduleBegin();
 }
 
 void loop() {
@@ -120,6 +181,14 @@ void loop() {
 
     tickerPump(); // prices, Finnhub, market hours only (checked internally)
     chartPump();  // candles, Yahoo, at most one symbol per 30s
+    eddiPump();   // Eddi status, myenergi, at most once per 30s
+    // Gated on a synced clock, like the water reminder below. Without
+    // this the scheduler acted on whatever the clock said, including the
+    // 1970 epoch left behind when an NTP sync fails at boot, and the
+    // jump when a later sync corrects it.
+    if (timeSyncIsValid()) {
+      eddiSchedulePump(nowLocal); // stop/start at the scheduled times
+    }
 
     // No market-hours gate here: Yahoo keeps serving the last session, so
     // there is always a chart worth showing. Only price fetching pauses.
@@ -132,16 +201,23 @@ void loop() {
       // First paint, or returning from an alert that wiped the screen:
       // draw immediately rather than waiting out a full dwell blank.
       lastPanelPageMs = millis();
-      uiDrawChartPanel(tft, 0, panelPair * 2);
-      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
+      uiDrawChartPanel(tft, 0, panelPair * 2, panelMode);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1, panelMode);
       panelsVisible = true;
     } else if (millis() - lastPanelPageMs >= PANEL_PAGE_MS) {
       // Dwell elapsed: advance to the next pair. This is the ONLY place
       // the panels are repainted during steady state.
       lastPanelPageMs = millis();
       panelPair = (panelPair + 1) % pairCount;
-      uiDrawChartPanel(tft, 0, panelPair * 2);
-      uiDrawChartPanel(tft, 1, panelPair * 2 + 1);
+      // Wrapping to the first pair means a full pass finished, so switch
+      // which chart the next pass shows. Only when the setup page asked
+      // for both; either fixed choice leaves panelMode where boot put it.
+      if (panelPair == 0 && chartPref == 0) {
+        panelMode = (panelMode == CHART_DAY_LINE) ? CHART_30MIN_CANDLES
+                                                  : CHART_DAY_LINE;
+      }
+      uiDrawChartPanel(tft, 0, panelPair * 2, panelMode);
+      uiDrawChartPanel(tft, 1, panelPair * 2 + 1, panelMode);
     }
 
     if (timeSyncIsValid() && lastFiredMarkInitialized &&

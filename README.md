@@ -69,6 +69,93 @@ Line charts rather than candlesticks: at 58px of panel height and 240px
 of width, a candle body would render about 5px wide with 1px wicks, which
 does not read on this panel.
 
+## Eddi status
+
+A row between the clock and the first chart panel shows the state of a
+myenergi Eddi water heater: a pill reading "Eddi" with a drawn symbol on
+the left, the weekday on the right, both in the same colour.
+
+| State | Symbol | Colour | Meaning |
+|-------|--------|--------|---------|
+| Diverting | play | green | actively heating from surplus |
+| Boosting | play | green | heating on demand |
+| Paused | two bars | amber | on, waiting for surplus |
+| Max Temp | two bars | amber | on, tank already hot |
+| Stopped | square | grey | off |
+| Unknown | hollow square | dim grey | no reading yet, or unreachable |
+
+Status changes are shown on the pill but not sent anywhere. Only the
+scheduler sends Telegram messages, and only about what it did: see the
+Eddi schedule section below.
+
+An earlier version announced every observed transition, which turned out
+to be a running commentary rather than a notification. A single
+scheduled stop arrived twice, once as the transition and once as the
+scheduler's confirmation of the same event, and the heater drifting
+between Paused and Diverting on its own as surplus comes and goes is
+frequent on a sunny day.
+
+Credentials go in the device's setup page, never in this repository: the
+myenergi hub serial (the HTTP Digest username), the myenergi API key
+(its password), and optionally a Telegram bot token and chat ID. Leaving
+the myenergi fields blank disables the pill; leaving the Telegram fields
+blank shows the pill but sends nothing.
+
+Two caveats worth knowing:
+
+- The myenergi API is **unofficial** and may change or stop working
+  without notice, the same risk the Yahoo chart endpoint carries. A
+  failure leaves the previous status on screen rather than blanking it.
+- The pill reflects **cloud state**, which can lag the physical device by
+  3 to 5 minutes. A command accepted by the cloud is not the same as a
+  heater that has acted on it.
+
+The device polls every 30 seconds. Community guidance for this API is at
+most one request per 10 seconds, with a stated risk of a temporary IP
+ban, so this sits well inside it.
+
+## Eddi schedule
+
+The device stops the Eddi at 12:00 and starts it at 22:00 every day.
+Both times are set on the setup page and stored on the device; they are
+not compiled in.
+
+After issuing a command it watches the status it already polls, and
+re-issues up to five times, two minutes apart, before giving up. This
+is not belt and braces: the myenergi cloud accepts a command
+immediately while the physical device can take 3 to 5 minutes to act,
+reporting the old status throughout. A Telegram message reports which
+of three things happened - confirmed, rejected outright, or not
+confirmed after every attempt.
+
+**A scheduled time that passes while the device is off is skipped, not
+caught up.** If it is unplugged over 12:00 and comes back at 12:30, it
+does nothing until 22:00. The device sees the Eddi's current mode but
+never the reason for it, so it cannot tell a command missed during a
+power cut from one the owner deliberately overrode from the app. The
+cost of skipping is one cycle, recoverable with a tap; the cost of
+catching up is silently undoing a deliberate choice.
+
+Boosting is not supported, and no schedule can be set from the
+touchscreen. A mistap must not be able to change what a water heater
+is doing.
+
+This overlaps with the Raspberry Pi controller at
+`github.com/bguruprasad/myenergi-eddi-python-controller`. Run both for
+a few days before retiring the Pi: two independent systems reporting
+the same events is the cheapest confirmation that they agree.
+
+## Reaching the setup page
+
+The page appears automatically when there are no saved WiFi credentials.
+To reach it on a device that is already connected, touch the screen
+during the 8 second countdown shown at boot.
+
+Stored values are prefilled, except the password and API keys: the page
+is served over an open access point, so sending those to the browser
+would broadcast them to anyone in range. Those fields show whether a
+value is saved, and leaving one blank keeps what is already stored.
+
 ## Building and flashing
 
 Requires `arduino-cli` with the `esp32:esp32` core (3.3.11) installed, and
@@ -97,4 +184,5 @@ end-to-end testing. Keep this commented out for normal use.
 
 - No audible beep - no speaker/buzzer hardware attached yet.
 - No persistent history of dismissed reminders.
-- No remote control or mobile app.
+- No remote control of the device itself, and no mobile app. It runs its
+  own schedules; nothing outside it can drive it except the setup page.
