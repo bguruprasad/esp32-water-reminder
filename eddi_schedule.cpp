@@ -71,6 +71,27 @@ static bool crossed(int prev, int now, int target) {
   return target > prev || target <= now;
 }
 
+// True when a target lies inside a gap too large to count as a tick, so
+// crossed() refused it. Skipping is deliberate - a time the device did
+// not watch pass cannot be told apart from one the owner has since
+// overridden - but skipping SILENTLY is not: an unexplained gap is how
+// the 01:12 misfire went unnoticed for two days. Saying so costs one
+// message and turns an invisible non-event into something checkable.
+static bool gapSkipped(int prev, int now, int target) {
+  if (prev == now) return false;
+  const int gap = (prev < now) ? (now - prev) : ((1440 - prev) + now);
+  if (gap <= MAX_GAP_MINUTES) return false;  // crossed() handled it
+  if (prev < now) return target > prev && target <= now;
+  return target > prev || target <= now;
+}
+
+// Minutes since midnight as "HH:MM", for the messages above.
+static String minutesToHhMm(int mins) {
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%02d:%02d", mins / 60, mins % 60);
+  return String(buf);
+}
+
 // Starts a command and the verification that follows it. The command is
 // issued immediately; whether it took effect is decided later by
 // watching the status the eddi module already polls.
@@ -108,6 +129,12 @@ static void pumpVerify(const struct tm &nowLocal) {
   // blocked every future stop and start until the device was rebooted.
   if (sta == EDDI_UNKNOWN) {
     lastAttemptMs = millis();
+    // Re-issue as well as count. Re-sending a possibly dropped command
+    // is the retry loop's entire purpose, and a link flaky enough to
+    // lose status polls is exactly the one likely to have lost the
+    // command too. Without this, the same outage that hid the status
+    // also guaranteed the command was never retried.
+    if (attempt <= VERIFY_ATTEMPTS) eddiSendMode(wantStart);
     if (++attempt > VERIFY_ATTEMPTS) {
       verifyActive = false;
       notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
@@ -119,22 +146,30 @@ static void pumpVerify(const struct tm &nowLocal) {
 
   // A start is confirmed by an actual transition out of Stopped, not by
   // the mere absence of Stopped. The Eddi is usually Paused, which is
-  // already "not 6", so the old check self-confirmed against whatever
-  // the status happened to be and would have reported success even if
-  // the command had been dropped entirely.
-  bool reached = wantStart ? (staBefore == 6 && sta != 6) : (sta == 6);
-
-  // Nothing to transition from: a start commanded while already running,
-  // or a stop while already stopped. The command was still sent, but no
-  // change can prove it landed, so say that rather than claim success.
-  bool alreadyThere = wantStart ? (staBefore != 6) : (staBefore == 6);
-  if (alreadyThere) {
-    verifyActive = false;
-    notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
-               " sent at " + hhMm(nowLocal) + ", but it was already " +
-               eddiStatusText(staBefore) + " so there was nothing to confirm.");
-    return;
+  // already "not 6", so a bare "sta != 6" self-confirmed against
+  // whatever the status happened to be and would have reported success
+  // even if the command had been dropped entirely.
+  //
+  // When the status before the command is unknown, there is no
+  // transition to measure, so fall back to the commanded state alone.
+  // That is weaker, but it is the honest reading of what we know, and
+  // it keeps the retry loop running. Treating unknown as "already
+  // there" would skip every retry: EDDI_UNKNOWN is -1, which satisfies
+  // "!= 6", so a start issued while the first status poll had not yet
+  // landed would be dismissed as needing no confirmation and the heater
+  // would stay stopped all day.
+  const bool knewBefore = (staBefore != EDDI_UNKNOWN);
+  bool reached;
+  if (wantStart) {
+    reached = knewBefore ? (staBefore == 6 && sta != 6) : (sta != 6);
+  } else {
+    reached = (sta == 6);
   }
+
+  // Reaching the commanded state is checked FIRST. A stop issued while
+  // the Eddi was already Stopped satisfies both this and the "nothing to
+  // transition from" case below, and the device being verifiably in the
+  // state that was asked for is the more useful thing to report.
   if (reached) {
     verifyActive = false;
     notifySend(String("Eddi: ") + (wantStart ? "started" : "stopped") +
@@ -143,6 +178,17 @@ static void pumpVerify(const struct tm &nowLocal) {
     return;
   }
 
+  // Nothing to transition from, and the commanded state was not reached:
+  // a start while already running. The command went out, but no change
+  // can prove it landed, so say that rather than claim a confirmation.
+  bool alreadyThere = knewBefore && wantStart && staBefore != 6;
+  if (alreadyThere) {
+    verifyActive = false;
+    notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
+               " sent at " + hhMm(nowLocal) + ", but it was already " +
+               eddiStatusText(staBefore) + " so there was nothing to confirm.");
+    return;
+  }
   if (attempt >= VERIFY_ATTEMPTS) {
     verifyActive = false;
     notifySend(String("Eddi: ") + (wantStart ? "start" : "stop") +
@@ -178,10 +224,23 @@ void eddiSchedulePump(const struct tm &nowLocal) {
     // times are ten hours apart, so this only matters if someone sets
     // them minutes apart, where finishing the first is the sane choice.
     if (!verifyActive) {
-      if (crossed(prev, nowMin, wifiSetupEddiStopMin())) {
+      const int stopMin = wifiSetupEddiStopMin();
+      const int startMin = wifiSetupEddiStartMin();
+
+      if (crossed(prev, nowMin, stopMin)) {
         beginCommand(false, nowLocal);
-      } else if (crossed(prev, nowMin, wifiSetupEddiStartMin())) {
+      } else if (crossed(prev, nowMin, startMin)) {
         beginCommand(true, nowLocal);
+      } else if (gapSkipped(prev, nowMin, stopMin)) {
+        notifySend(String("Eddi: the ") + minutesToHhMm(stopMin) +
+                   " stop was skipped. The clock jumped from " +
+                   minutesToHhMm(prev) + " to " + minutesToHhMm(nowMin) +
+                   ", so the device never saw it pass. Nothing was sent.");
+      } else if (gapSkipped(prev, nowMin, startMin)) {
+        notifySend(String("Eddi: the ") + minutesToHhMm(startMin) +
+                   " start was skipped. The clock jumped from " +
+                   minutesToHhMm(prev) + " to " + minutesToHhMm(nowMin) +
+                   ", so the device never saw it pass. Nothing was sent.");
       }
     }
   }
